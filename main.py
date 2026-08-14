@@ -2,10 +2,11 @@ import sys
 import os
 import json
 import subprocess
+import tempfile
 import traceback
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
 
 # Dönüştürme kütüphaneleri açılışta değil, ilgili işlem seçildiğinde yüklenir.
@@ -13,8 +14,8 @@ from urllib.request import urlopen
 OCR_AVAILABLE = None
 _PDF_FONTS = None
 
-from PySide6.QtCore import Qt, QObject, Signal, QThread, QUrl
-from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QDesktopServices
+from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer
+from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QFrame,
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 UPDATE_CONFIG_FILE = "update_config.json"
 
 
@@ -812,6 +813,46 @@ class UpdateWorker(QObject):
         })
 
 
+class UpdateDownloadWorker(QObject):
+    progress = Signal(int)
+    finished = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, url, version):
+        super().__init__()
+        self.url = url
+        self.version = version
+
+    def run(self):
+        try:
+            update_folder = Path(tempfile.gettempdir()) / "AzraConverterUpdates"
+            update_folder.mkdir(parents=True, exist_ok=True)
+            name = Path(urlsplit(self.url).path).name or f"AzraConverter-{self.version}-Setup.exe"
+            target = update_folder / name
+            partial = target.with_suffix(target.suffix + ".download")
+
+            with urlopen(self.url, timeout=30) as response, open(partial, "wb") as output:
+                total = int(response.headers.get("Content-Length", 0))
+                received = 0
+                while True:
+                    chunk = response.read(1024 * 256)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    received += len(chunk)
+                    if total:
+                        self.progress.emit(min(100, int(received / total * 100)))
+
+            if not partial.exists() or partial.stat().st_size == 0:
+                raise RuntimeError("Güncelleme paketi indirilemedi.")
+
+            os.replace(partial, target)
+            self.progress.emit(100)
+            self.finished.emit(str(target))
+        except Exception as exc:
+            self.error.emit(str(exc) or "Güncelleme paketi indirilemedi.")
+
+
 class ConverterWorker(QObject):
     finished = Signal(str)
     error = Signal(str)
@@ -1441,13 +1482,18 @@ class MainWindow(QMainWindow):
         self._update_thread = None
         self._update_worker = None
 
+    def _update_download_thread_finished(self):
+        self._update_download_thread = None
+        self._update_download_worker = None
+
     def update_check_finished(self, result):
         latest = result["version"]
         if result["is_new"] and result["download_url"]:
             self._update_download_url = result["download_url"]
+            self._update_version = latest
             note = f" — {result['notes']}" if result["notes"] else ""
             self.update_status.setText(f"Yeni sürüm hazır: v{latest}{note}")
-            self.update_button.setText("YENİ SÜRÜMÜ İNDİR")
+            self.update_button.setText("YENİ SÜRÜMÜ YÜKLE")
             self.update_button.setEnabled(True)
             try:
                 self.update_button.clicked.disconnect()
@@ -1469,8 +1515,53 @@ class MainWindow(QMainWindow):
 
     def download_latest_update(self):
         url = getattr(self, "_update_download_url", "")
-        if url:
-            QDesktopServices.openUrl(QUrl(url))
+        version = getattr(self, "_update_version", "güncel")
+        if not url or getattr(self, "_update_download_thread", None) is not None:
+            return
+
+        self.update_button.setEnabled(False)
+        self.update_status.setText("Güncelleme indiriliyor... %0")
+        self._update_download_thread = QThread()
+        self._update_download_worker = UpdateDownloadWorker(url, version)
+        self._update_download_worker.moveToThread(self._update_download_thread)
+        self._update_download_thread.started.connect(self._update_download_worker.run)
+        self._update_download_worker.progress.connect(self.update_download_progress)
+        self._update_download_worker.finished.connect(self.update_download_finished)
+        self._update_download_worker.error.connect(self.update_download_error)
+        self._update_download_worker.finished.connect(self._update_download_thread.quit)
+        self._update_download_worker.error.connect(self._update_download_thread.quit)
+        self._update_download_thread.finished.connect(self._update_download_worker.deleteLater)
+        self._update_download_thread.finished.connect(self._update_download_thread_finished)
+        self._update_download_thread.start()
+
+    def update_download_progress(self, progress):
+        self.update_status.setText(f"Güncelleme indiriliyor... %{progress}")
+
+    def update_download_finished(self, installer_path):
+        self.update_status.setText("Güncelleme hazırlanıyor. Program yeniden başlatılacak...")
+        self.update_button.setText("YÜKLEME BAŞLATILIYOR")
+        self._launch_update_installer(installer_path)
+
+    def update_download_error(self, message):
+        self.update_status.setText(f"Güncelleme indirilemedi: {message}")
+        self.update_button.setText("YENİ SÜRÜMÜ YÜKLE")
+        self.update_button.setEnabled(True)
+
+    def _launch_update_installer(self, installer_path):
+        installer = Path(installer_path)
+        app_executable = Path(sys.executable).resolve()
+        helper = Path(tempfile.gettempdir()) / "AzraConverterUpdates" / "install_update.cmd"
+        helper.write_text(
+            "@echo off\r\n"
+            f"powershell -NoProfile -NonInteractive -Command \"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\"\r\n"
+            f"start \"\" /wait \"{installer}\" /SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\r\n"
+            f"start \"\" \"{app_executable}\"\r\n"
+            "del \"%~f0\"\r\n",
+            encoding="utf-8",
+        )
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.Popen(["cmd", "/c", str(helper)], creationflags=creationflags)
+        QTimer.singleShot(350, QApplication.instance().quit)
 
     def show_about(self):
         self._select_nav(self.nav_about)

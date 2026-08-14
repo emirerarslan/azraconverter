@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.0.1.exe",
-  "notes": "DOC dosyası desteği eklendi."
+  "version": "1.0.2",
+  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.0.2.exe",
+  "notes": "Uygulama içi güncelleme ve otomatik yeniden başlatma eklendi."
 }
