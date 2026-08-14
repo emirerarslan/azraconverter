@@ -1,5 +1,6 @@
 {
-  "version": "1.0.2",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.0.2.exe",
-  "notes": "Uygulama içi güncelleme ve otomatik yeniden başlatma eklendi."
+  "version": "1.0.3",
+  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.0.3.exe",
+  "sha256": "e3aae40490d20c2403102f3e5e50127a9477997b4abc5831f47658a5e17e42eb",
+  "notes": "Uygulama içi güncelleme indirmesi doğrulanarak daha güvenli hâle getirildi."
 }

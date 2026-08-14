@@ -1,13 +1,14 @@
 import sys
 import os
 import json
+import hashlib
 import subprocess
 import tempfile
 import traceback
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urljoin, urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 # Dönüştürme kütüphaneleri açılışta değil, ilgili işlem seçildiğinde yüklenir.
 # Böylece arayüz mümkün olan en kısa sürede görüntülenir.
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 UPDATE_CONFIG_FILE = "update_config.json"
 
 
@@ -809,6 +810,7 @@ class UpdateWorker(QObject):
             "version": latest,
             "is_new": version_key(latest) > version_key(APP_VERSION),
             "download_url": download_url,
+            "sha256": clean_text(manifest.get("sha256")),
             "notes": clean_text(manifest.get("notes")),
         })
 
@@ -818,10 +820,11 @@ class UpdateDownloadWorker(QObject):
     finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, url, version):
+    def __init__(self, url, version, expected_sha256=""):
         super().__init__()
         self.url = url
         self.version = version
+        self.expected_sha256 = expected_sha256.lower()
 
     def run(self):
         try:
@@ -831,7 +834,11 @@ class UpdateDownloadWorker(QObject):
             target = update_folder / name
             partial = target.with_suffix(target.suffix + ".download")
 
-            with urlopen(self.url, timeout=30) as response, open(partial, "wb") as output:
+            request = Request(
+                self.url,
+                headers={"User-Agent": "AzraConverter-Updater"},
+            )
+            with urlopen(request, timeout=30) as response, open(partial, "wb") as output:
                 total = int(response.headers.get("Content-Length", 0))
                 received = 0
                 while True:
@@ -845,6 +852,12 @@ class UpdateDownloadWorker(QObject):
 
             if not partial.exists() or partial.stat().st_size == 0:
                 raise RuntimeError("Güncelleme paketi indirilemedi.")
+            if total and received != total:
+                raise RuntimeError("Güncelleme paketi eksik indirildi. Lütfen tekrar deneyin.")
+
+            actual_sha256 = hashlib.sha256(partial.read_bytes()).hexdigest().lower()
+            if self.expected_sha256 and actual_sha256 != self.expected_sha256:
+                raise RuntimeError("Güncelleme paketi doğrulanamadı. Lütfen tekrar deneyin.")
 
             os.replace(partial, target)
             self.progress.emit(100)
@@ -1491,6 +1504,7 @@ class MainWindow(QMainWindow):
         if result["is_new"] and result["download_url"]:
             self._update_download_url = result["download_url"]
             self._update_version = latest
+            self._update_checksum = result["sha256"]
             note = f" — {result['notes']}" if result["notes"] else ""
             self.update_status.setText(f"Yeni sürüm hazır: v{latest}{note}")
             self.update_button.setText("YENİ SÜRÜMÜ YÜKLE")
@@ -1522,7 +1536,11 @@ class MainWindow(QMainWindow):
         self.update_button.setEnabled(False)
         self.update_status.setText("Güncelleme indiriliyor... %0")
         self._update_download_thread = QThread()
-        self._update_download_worker = UpdateDownloadWorker(url, version)
+        self._update_download_worker = UpdateDownloadWorker(
+            url,
+            version,
+            getattr(self, "_update_checksum", ""),
+        )
         self._update_download_worker.moveToThread(self._update_download_thread)
         self._update_download_thread.started.connect(self._update_download_worker.run)
         self._update_download_worker.progress.connect(self.update_download_progress)
