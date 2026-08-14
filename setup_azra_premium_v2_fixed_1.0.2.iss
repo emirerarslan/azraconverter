@@ -3,7 +3,7 @@
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
 #define MyAppIcon "azra_gold.ico"
@@ -18,7 +18,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.0.2
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.0.1
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern

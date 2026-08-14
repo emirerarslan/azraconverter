@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import subprocess
 import traceback
 from pathlib import Path
 from urllib.error import URLError
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 UPDATE_CONFIG_FILE = "update_config.json"
 
 
@@ -637,6 +638,40 @@ def excel_to_pdf(src, progress):
     return out
 
 
+def word_to_pdf_with_microsoft_word(src, out):
+    """Eski .doc belgelerini Word'ün kendi PDF dışa aktarmasıyla dönüştürür."""
+    def ps_quote(value):
+        return str(value).replace("'", "''")
+
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$word = New-Object -ComObject Word.Application; "
+        "try { "
+        f"$document = $word.Documents.Open('{ps_quote(src)}', $false, $true); "
+        f"$document.ExportAsFixedFormat('{ps_quote(out)}', 17); "
+        "} finally { "
+        "if ($document) { $document.Close($false) }; "
+        "if ($word) { $word.Quit() } "
+        "}"
+    )
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        startupinfo=startupinfo,
+        check=False,
+    )
+    if result.returncode != 0 or not out.exists():
+        detail = clean_text(result.stderr) or clean_text(result.stdout)
+        raise RuntimeError(
+            "Bu .doc belgesini dönüştürmek için bilgisayarda Microsoft Word kurulu olmalıdır."
+            + (f"\n\nAyrıntı: {detail}" if detail else "")
+        )
+
+
 def word_to_pdf(src, progress):
     from docx import Document
     from reportlab.lib import colors
@@ -646,6 +681,14 @@ def word_to_pdf(src, progress):
 
     src = Path(src)
     out = unique_output(src.with_name(src.stem + "_PDF.pdf"))
+
+    # python-docx eski ikili .doc biçimini okuyamaz. Word, biçimi koruyarak
+    # hem .doc hem de .docx belgelerini PDF olarak dışa aktarabilir.
+    if src.suffix.lower() == ".doc":
+        progress.emit(10)
+        word_to_pdf_with_microsoft_word(src, out)
+        progress.emit(100)
+        return out
 
     document = Document(str(src))
     styles = make_pdf_styles()
@@ -793,8 +836,9 @@ class ConverterWorker(QObject):
                 raise ValueError("Geçersiz dönüşüm seçildi.")
 
             self.finished.emit(str(result))
-        except Exception:
-            self.error.emit(traceback.format_exc())
+        except Exception as exc:
+            # Kullanıcıya hata izinin tamamı yerine doğrudan çözüm odaklı mesajı göster.
+            self.error.emit(str(exc) or traceback.format_exc())
 
 
 
@@ -1534,14 +1578,14 @@ class MainWindow(QMainWindow):
             self,
             "Dosya Seç",
             "",
-            "Desteklenen Dosyalar (*.pdf *.xlsx *.xlsm *.docx);;PDF (*.pdf);;Excel (*.xlsx *.xlsm);;Word (*.docx)"
+            "Desteklenen Dosyalar (*.pdf *.xlsx *.xlsm *.doc *.docx);;PDF (*.pdf);;Excel (*.xlsx *.xlsm);;Word (*.doc *.docx)"
         )
         if path:
             self.set_file(path)
 
     def set_file(self, path):
         path = Path(path)
-        if path.suffix.lower() not in [".pdf", ".xlsx", ".xlsm", ".docx"]:
+        if path.suffix.lower() not in [".pdf", ".xlsx", ".xlsm", ".doc", ".docx"]:
             QMessageBox.warning(self, "Desteklenmeyen dosya",
                                 "Bu dosya türü desteklenmiyor.\n\nPDF, Excel veya Word dosyası seçin.")
             return
@@ -1556,7 +1600,7 @@ class MainWindow(QMainWindow):
         self.pdf_excel_card.button.setEnabled(ext == ".pdf")
         self.pdf_word_card.button.setEnabled(ext == ".pdf")
         self.excel_pdf_card.button.setEnabled(ext in [".xlsx", ".xlsm"])
-        self.word_pdf_card.button.setEnabled(ext == ".docx")
+        self.word_pdf_card.button.setEnabled(ext in [".doc", ".docx"])
 
     def start_conversion(self, mode):
         if not self.source_file:
