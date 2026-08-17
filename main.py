@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1408,7 +1408,7 @@ class DropZone(QFrame):
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(8)
 
-        icon = QLabel("↓")
+        icon = QLabel("DOSYA")
         icon.setAlignment(Qt.AlignCenter)
         icon.setObjectName("dropIcon")
 
@@ -1416,7 +1416,7 @@ class DropZone(QFrame):
         title.setAlignment(Qt.AlignCenter)
         title.setObjectName("dropTitle")
 
-        sub = QLabel("PDF • DOC/DOCX • XLS/XLSX • ODT/ODS • CSV/RTF")
+        sub = QLabel("PDF | DOC/DOCX | XLS/XLSX | ODT/ODS | CSV/RTF")
         sub.setAlignment(Qt.AlignCenter)
         sub.setObjectName("dropSub")
 
@@ -1471,7 +1471,7 @@ class ConversionCard(QFrame):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(5)
 
-        self.icon = QLabel("↗")
+        self.icon = QLabel(">>")
         self.icon.setObjectName("cardIcon")
         self.icon.setAlignment(Qt.AlignLeft)
 
@@ -1713,9 +1713,9 @@ class MainWindow(QMainWindow):
         side.addWidget(brand)
         side.addSpacing(24)
 
-        self.nav_converter = NavButton("  ◈   Dönüştürücü")
-        self.nav_history = NavButton("  ◷   Geçmiş")
-        self.nav_about = NavButton("  ⓘ   Hakkında")
+        self.nav_converter = NavButton("  Dönüştürücü")
+        self.nav_history = NavButton("  Geçmiş")
+        self.nav_about = NavButton("  Hakkında")
         for b in [self.nav_converter, self.nav_history, self.nav_about]:
             b.setObjectName("nav")
             side.addWidget(b)
@@ -1747,7 +1747,7 @@ class MainWindow(QMainWindow):
         heading = QVBoxLayout()
         heading.setSpacing(4)
 
-        eyebrow = QLabel("AZRA GOLD  •  DOCUMENT TOOLS")
+        eyebrow = QLabel("AZRA GOLD  |  DOCUMENT TOOLS")
         eyebrow.setObjectName("eyebrow")
         heading.addWidget(eyebrow)
 
@@ -1790,12 +1790,12 @@ class MainWindow(QMainWindow):
         cards.setHorizontalSpacing(10)
         cards.setVerticalSpacing(10)
 
-        self.pdf_excel_card = ConversionCard("PDF  →  EXCEL", "OCR + akıllı tablo algılama")
-        self.pdf_word_card = ConversionCard("PDF  →  WORD", "OCR + düzenlenebilir metin")
-        self.excel_pdf_card = ConversionCard("EXCEL  →  PDF", "Sayfa düzenini koru")
-        self.word_pdf_card = ConversionCard("WORD  →  PDF", "Belgeyi PDF olarak dışa aktar")
-        self.word_excel_card = ConversionCard("WORD  →  EXCEL", "Metin + tabloları sayfalara aktar")
-        self.excel_word_card = ConversionCard("EXCEL  →  WORD", "Tüm çalışma sayfalarını aktar")
+        self.pdf_excel_card = ConversionCard("PDF  ->  EXCEL", "OCR + akıllı tablo algılama")
+        self.pdf_word_card = ConversionCard("PDF  ->  WORD", "OCR + düzenlenebilir metin")
+        self.excel_pdf_card = ConversionCard("EXCEL  ->  PDF", "Sayfa düzenini koru")
+        self.word_pdf_card = ConversionCard("WORD  ->  PDF", "Belgeyi PDF olarak dışa aktar")
+        self.word_excel_card = ConversionCard("WORD  ->  EXCEL", "Metin + tabloları sayfalara aktar")
+        self.excel_word_card = ConversionCard("EXCEL  ->  WORD", "Tüm çalışma sayfalarını aktar")
 
         cards.addWidget(self.pdf_excel_card, 0, 0)
         cards.addWidget(self.pdf_word_card, 0, 1)
@@ -1861,12 +1861,12 @@ class MainWindow(QMainWindow):
         import json
         from datetime import datetime
         labels = {
-            "pdf_excel": "PDF → Excel",
-            "pdf_word": "PDF → Word",
-            "excel_pdf": "Excel → PDF",
-            "word_pdf": "Word → PDF",
-            "word_excel": "Word → Excel",
-            "excel_word": "Excel → Word",
+            "pdf_excel": "PDF -> Excel",
+            "pdf_word": "PDF -> Word",
+            "excel_pdf": "Excel -> PDF",
+            "word_pdf": "Word -> PDF",
+            "word_excel": "Word -> Excel",
+            "excel_word": "Excel -> Word",
         }
         data = self._load_history()
         data.insert(0, {
@@ -1927,7 +1927,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        dialog = self._dark_dialog("Azra Converter • Geçmiş", 820, 500)
+        dialog = self._dark_dialog("Azra Converter - Geçmiş", 820, 500)
         self._history_dialog = dialog
         dialog.finished.connect(lambda _=0: self._history_dialog_closed())
 
@@ -2017,7 +2017,7 @@ class MainWindow(QMainWindow):
                 result.get("package_sha256", "")
                 if package_url else result.get("sha256", "")
             )
-            note = f" — {result['notes']}" if result["notes"] else ""
+            note = f" - {result['notes']}" if result["notes"] else ""
             self.update_status.setText(f"Yeni sürüm hazır: v{latest}{note}")
             self.update_button.setText(
                 "PROGRAM İÇİNDE GÜNCELLE" if package_url else "YENİ SÜRÜMÜ YÜKLE"
@@ -2185,8 +2185,8 @@ class MainWindow(QMainWindow):
 
         purpose = QLabel(
             "PDF, Word ve Excel belgeleri arasında altı yönlü dönüşüm yapmak.<br><br>"
-            "PDF → Excel ve PDF → Word işlemlerinde OCR desteğiyle taranmış "
-            "belgelerden içerik çıkarılır. Word/Excel → PDF işlemlerinde önce "
+            "PDF -> Excel ve PDF -> Word işlemlerinde OCR desteğiyle taranmış "
+            "belgelerden içerik çıkarılır. Word/Excel -> PDF işlemlerinde önce "
             "Microsoft Office, ardından LibreOffice kullanılarak sayfa düzeni "
             "mümkün olan en yüksek kalitede korunur.<br><br>"
             "Yaygın biçimler: PDF; DOC, DOCX, DOCM, DOT/DOTX, ODT, RTF, TXT; "

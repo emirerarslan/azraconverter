@@ -1,0 +1,9 @@
+AZRA CONVERTER KURULUMU
+=======================
+
+1. Varsa açık Azra Converter uygulamasını kapatın.
+2. AZRA-CONVERTER-SETUP dosyasını çalıştırın.
+3. Windows yönetici izni isterse Evet seçeneğine basın.
+4. Kurulum tamamlandığında masaüstü kısayolundan programı açın.
+
+Not: 1.1.1 ve sonraki sürümlerde yeni güncellemeler program içinden uygulanır.

@@ -1,8 +1,8 @@
 {
-  "version": "1.1.1",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.1.exe",
+  "version": "1.1.2",
+  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.2.exe",
   "sha256": "",
-  "package_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-1.1.1.zip",
+  "package_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-1.1.2.zip",
   "package_sha256": "",
-  "notes": "Kurulum EXE'si açmadan program içinden güncelleme ve yüksek çözünürlüklü yeni uygulama ikonu."
+  "notes": "Arayüz ve kurulum ekranındaki desteklenmeyen simgeler kaldırıldı; dağıtım paketi ve yeni ikon iyileştirildi."
 }

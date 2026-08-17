@@ -28,7 +28,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip pyinstaller
           python -m pip install -r requirements.txt
-          choco install tesseract innosetup --yes --no-progress
+          choco install tesseract innosetup winrar --yes --no-progress
 
       - name: Run conversion tests
         shell: powershell
@@ -81,6 +81,7 @@ jobs:
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           $installer = "installer/AZRA-CONVERTER-SETUP-$version.exe"
           $package = "release/AZRA-CONVERTER-UPDATE-$version.zip"
+          $distribution = "release/AZRA-CONVERTER-$version-DAGITIM.rar"
           if (-not (Test-Path -LiteralPath $installer)) {
             throw "Installer was not produced: $installer"
           }
@@ -89,16 +90,33 @@ jobs:
           }
           $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
           $packageSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant()
+
+          $rar = "C:\Program Files\WinRAR\Rar.exe"
+          if (-not (Test-Path -LiteralPath $rar)) {
+            throw "WinRAR command-line tool was not found."
+          }
+          & $rar a -ep1 -m5 -idq $distribution $installer "DAGITIM_KURULUM.txt"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $distribution)) {
+            throw "RAR distribution package could not be produced."
+          }
+          $distributionSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $distribution).Hash.ToLowerInvariant()
+
           $manifest = [ordered]@{
             version = $version
             download_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-$version.exe"
             sha256 = $sha256
             package_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-$version.zip"
             package_sha256 = $packageSha256
-            notes = "Kurulum EXE'si açmadan program içinden güncelleme ve yüksek çözünürlüklü yeni uygulama ikonu."
+            distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
+            distribution_sha256 = $distributionSha256
+            notes = "Arayüz ve kurulum ekranındaki desteklenmeyen simgeler kaldırıldı; dağıtım paketi ve yeni ikon iyileştirildi."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
-          Set-Content -LiteralPath release/installer.sha256 -Value "$sha256  AZRA-CONVERTER-SETUP-$version.exe" -Encoding ascii
+          @(
+            "$sha256  AZRA-CONVERTER-SETUP-$version.exe"
+            "$packageSha256  AZRA-CONVERTER-UPDATE-$version.zip"
+            "$distributionSha256  AZRA-CONVERTER-$version-DAGITIM.rar"
+          ) | Set-Content -LiteralPath release/checksums.sha256 -Encoding ascii
 
       - name: Publish GitHub release
         shell: powershell
@@ -109,7 +127,8 @@ jobs:
           gh release create $env:GITHUB_REF_NAME `
             "installer/AZRA-CONVERTER-SETUP-$version.exe" `
             "release/AZRA-CONVERTER-UPDATE-$version.zip" `
+            "release/AZRA-CONVERTER-$version-DAGITIM.rar" `
             "release/version.json" `
-            "release/installer.sha256" `
+            "release/checksums.sha256" `
             --title "Azra Converter $version" `
-            --notes "Program içinden kurulum açmadan güncelleme, çoklu güncelleme kanalı ve yüksek çözünürlüklü yeni uygulama ikonu."
+            --notes "Desteklenmeyen dekoratif simgeler kaldırıldı, kurulum metinleri güvenli karakterlerle güncellendi ve dağıtıma hazır RAR paketi eklendi."

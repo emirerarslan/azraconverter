@@ -3,7 +3,7 @@
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
 #define MyAppIcon "azra_gold.ico"
@@ -18,7 +18,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.1
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.2
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
@@ -169,19 +169,19 @@ begin
 
   StyleAllControls(WizardForm);
 
-  WizardForm.NextButton.Caption := 'İLERİ  ›';
-  WizardForm.BackButton.Caption := '‹  GERİ';
+  WizardForm.NextButton.Caption := 'İLERİ  >';
+  WizardForm.BackButton.Caption := '<  GERİ';
   WizardForm.CancelButton.Caption := 'İPTAL';
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpWelcome then
-    WizardForm.NextButton.Caption := 'BAŞLA  ›'
+    WizardForm.NextButton.Caption := 'BAŞLA  >'
   else if CurPageID = wpFinished then
     WizardForm.NextButton.Caption := 'BİTİR'
   else
-    WizardForm.NextButton.Caption := 'İLERİ  ›';
+    WizardForm.NextButton.Caption := 'İLERİ  >';
 
   WizardForm.Color := BG;
   WizardForm.MainPanel.Color := BG;
