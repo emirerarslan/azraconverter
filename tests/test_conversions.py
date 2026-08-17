@@ -59,6 +59,12 @@ class Progress:
 
 
 class ConversionTests(unittest.TestCase):
+    def test_conversion_worker_honours_cancel_request(self):
+        worker = main.ConverterWorker("pdf_word", "document.pdf")
+        worker.cancel()
+        with self.assertRaises(main.ConversionCancelled):
+            worker.check_cancelled()
+
     def test_custom_update_manifest_is_normalised(self):
         manifest = main.normalise_update_manifest(
             {

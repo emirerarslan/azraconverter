@@ -30,6 +30,14 @@ jobs:
           python -m pip install -r requirements.txt
           choco install tesseract innosetup winrar --yes --no-progress
 
+      - name: Set application version from tag
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $source = Get-Content -Raw -LiteralPath "main.py"
+          $source = $source -replace 'APP_VERSION = "[^"]+"', "APP_VERSION = `"$version`""
+          Set-Content -LiteralPath "main.py" -Value $source -Encoding utf8
+
       - name: Run conversion tests
         shell: powershell
         run: python -m unittest discover -s tests -v
@@ -109,7 +117,7 @@ jobs:
             package_sha256 = $packageSha256
             distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
-            notes = "Arayüz ve kurulum ekranındaki desteklenmeyen simgeler kaldırıldı; dağıtım paketi ve yeni ikon iyileştirildi."
+            notes = "Tamamlanma penceresi koyu-altın temaya alındı; dosya görünümü büyütüldü ve önde açılan iptal edilebilir ilerleme penceresi eklendi."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
@@ -131,7 +139,7 @@ jobs:
             "release/version.json",
             "release/checksums.sha256"
           )
-          $notes = "Desteklenmeyen dekoratif simgeler kaldırıldı, kurulum metinleri güvenli karakterlerle güncellendi ve dağıtıma hazır RAR paketi eklendi."
+          $notes = "Koyu-altın tamamlanma penceresi, büyük seçili dosya görünümü, otomatik sürüm etiketi ve iptal edilebilir önde ilerleme penceresi eklendi."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
             cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"

@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import traceback
 import zipfile
 from pathlib import Path
@@ -30,7 +31,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1360,34 +1361,61 @@ class UpdateDownloadWorker(QObject):
             self.error.emit(str(exc) or "Güncelleme paketi indirilemedi.")
 
 
+class ConversionCancelled(Exception):
+    """Kullanıcının güvenli bir kontrol noktasında dönüşümü iptal etmesi."""
+
+
+class CancellableProgress:
+    def __init__(self, worker):
+        self.worker = worker
+
+    def emit(self, value):
+        self.worker.check_cancelled()
+        self.worker.progress.emit(value)
+
+
 class ConverterWorker(QObject):
     finished = Signal(str)
     error = Signal(str)
     progress = Signal(int)
+    cancelled = Signal()
 
     def __init__(self, mode, source):
         super().__init__()
         self.mode = mode
         self.source = source
+        self._cancel_event = threading.Event()
+
+    def cancel(self):
+        self._cancel_event.set()
+
+    def check_cancelled(self):
+        if self._cancel_event.is_set():
+            raise ConversionCancelled()
 
     def run(self):
         try:
+            self.check_cancelled()
+            progress = CancellableProgress(self)
             if self.mode == "pdf_excel":
-                result = pdf_to_excel(self.source, self.progress)
+                result = pdf_to_excel(self.source, progress)
             elif self.mode == "pdf_word":
-                result = pdf_to_word(self.source, self.progress)
+                result = pdf_to_word(self.source, progress)
             elif self.mode == "excel_pdf":
-                result = excel_to_pdf(self.source, self.progress)
+                result = excel_to_pdf(self.source, progress)
             elif self.mode == "word_pdf":
-                result = word_to_pdf(self.source, self.progress)
+                result = word_to_pdf(self.source, progress)
             elif self.mode == "word_excel":
-                result = word_to_excel(self.source, self.progress)
+                result = word_to_excel(self.source, progress)
             elif self.mode == "excel_word":
-                result = excel_to_word(self.source, self.progress)
+                result = excel_to_word(self.source, progress)
             else:
                 raise ValueError("Geçersiz dönüşüm seçildi.")
 
+            self.check_cancelled()
             self.finished.emit(str(result))
+        except ConversionCancelled:
+            self.cancelled.emit()
         except Exception as exc:
             # Kullanıcıya hata izinin tamamı yerine doğrudan çözüm odaklı mesajı göster.
             self.error.emit(str(exc) or traceback.format_exc())
@@ -1408,21 +1436,43 @@ class DropZone(QFrame):
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(8)
 
-        icon = QLabel("DOSYA")
-        icon.setAlignment(Qt.AlignCenter)
-        icon.setObjectName("dropIcon")
+        self.icon = QLabel("DOSYA")
+        self.icon.setAlignment(Qt.AlignCenter)
+        self.icon.setObjectName("dropIcon")
 
-        title = QLabel("DOSYAYI BURAYA BIRAK")
-        title.setAlignment(Qt.AlignCenter)
-        title.setObjectName("dropTitle")
+        self.title = QLabel("DOSYAYI BURAYA BIRAK")
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setObjectName("dropTitle")
+        self.title.setWordWrap(True)
 
-        sub = QLabel("PDF | DOC/DOCX | XLS/XLSX | ODT/ODS | CSV/RTF")
-        sub.setAlignment(Qt.AlignCenter)
-        sub.setObjectName("dropSub")
+        self.sub = QLabel("PDF | DOC/DOCX | XLS/XLSX | ODT/ODS | CSV/RTF")
+        self.sub.setAlignment(Qt.AlignCenter)
+        self.sub.setObjectName("dropSub")
+        self.sub.setWordWrap(True)
 
-        layout.addWidget(icon)
-        layout.addWidget(title)
-        layout.addWidget(sub)
+        layout.addWidget(self.icon)
+        layout.addWidget(self.title)
+        layout.addWidget(self.sub)
+
+    def show_file(self, path):
+        path = Path(path)
+        try:
+            size = path.stat().st_size
+            size_text = (
+                f"{size / (1024 * 1024):.1f} MB"
+                if size >= 1024 * 1024 else f"{max(1, size // 1024)} KB"
+            )
+        except OSError:
+            size_text = ""
+        self.setProperty("selected", True)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.icon.setText(path.suffix.lstrip(".").upper() or "DOSYA")
+        self.title.setText(path.name)
+        self.sub.setText(
+            f"{size_text}  |  Değiştirmek için tıklayın veya yeni dosya bırakın"
+            if size_text else "Değiştirmek için tıklayın veya yeni dosya bırakın"
+        )
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1452,6 +1502,95 @@ class DropZone(QFrame):
             if path:
                 self.fileDropped.emit(path)
         event.acceptProposedAction()
+
+
+class ConversionProgressDialog(QDialog):
+    cancelRequested = Signal()
+
+    def __init__(self, file_name, parent=None):
+        super().__init__(parent)
+        self._running = True
+        self._cancel_requested = False
+        self.setWindowTitle("Dönüştürülüyor")
+        self.setModal(True)
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.setFixedSize(470, 245)
+        self.setStyleSheet("""
+            QDialog { background: #0F0F10; border: 1px solid #4A3C25; }
+            QLabel#progressTitle {
+                color: #D6B16B; font-size: 21px; font-weight: 800;
+            }
+            QLabel#progressFile {
+                color: #F2E8D3; font-size: 14px; font-weight: 650;
+            }
+            QLabel#progressHint { color: #9A9286; font-size: 11px; }
+            QProgressBar {
+                background: #1A1917; color: #E7C87F;
+                border: 1px solid #3B3429; border-radius: 7px;
+                min-height: 24px; text-align: center; font-weight: 700;
+            }
+            QProgressBar::chunk { background: #D6B16B; border-radius: 6px; }
+            QPushButton {
+                background: #1B1916; color: #D6B16B;
+                border: 1px solid #6B5633; border-radius: 8px;
+                min-height: 36px; font-weight: 800;
+            }
+            QPushButton:hover { background: #D6B16B; color: #11100E; }
+            QPushButton:disabled { color: #75684F; border-color: #39342C; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 22)
+        layout.setSpacing(13)
+
+        title = QLabel("DÖNÜŞTÜRÜLÜYOR")
+        title.setObjectName("progressTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        self.file_label = QLabel(file_name)
+        self.file_label.setObjectName("progressFile")
+        self.file_label.setAlignment(Qt.AlignCenter)
+        self.file_label.setWordWrap(True)
+        layout.addWidget(self.file_label)
+
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        layout.addWidget(self.progress)
+
+        self.hint = QLabel("Lütfen işlem tamamlanana kadar bekleyin.")
+        self.hint.setObjectName("progressHint")
+        self.hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.hint)
+
+        self.cancel_button = QPushButton("İPTAL ET")
+        self.cancel_button.clicked.connect(self.request_cancel)
+        layout.addWidget(self.cancel_button)
+
+    def set_progress(self, value):
+        self.progress.setValue(value)
+
+    def request_cancel(self):
+        if not self._running or self._cancel_requested:
+            return
+        self._cancel_requested = True
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setText("İPTAL EDİLİYOR...")
+        self.hint.setText("İşlem güvenli biçimde durduruluyor, lütfen bekleyin.")
+        self.cancelRequested.emit()
+
+    def finish(self):
+        self._running = False
+        self.close()
+
+    def closeEvent(self, event):
+        if self._running:
+            self.request_cancel()
+            event.ignore()
+            return
+        super().closeEvent(event)
 
 
 class NavButton(QPushButton):
@@ -1499,6 +1638,8 @@ class MainWindow(QMainWindow):
         self.source_file = None
         self.thread = None
         self.worker = None
+        self.progress_dialog = None
+        self._active_mode = None
         self.current_page = "converter"
 
         self.setWindowTitle(APP_NAME)
@@ -1587,15 +1728,28 @@ class MainWindow(QMainWindow):
                 background: #15130F;
                 border: 1px dashed #D6B16B;
             }
+            QFrame#dropZone[selected="true"] {
+                background: #17140F;
+                border: 2px solid #D6B16B;
+            }
             QLabel#dropIcon {
                 color: #D6B16B;
                 font-size: 35px;
                 font-weight: 300;
             }
+            QFrame#dropZone[selected="true"] QLabel#dropIcon {
+                font-size: 40px;
+                font-weight: 800;
+            }
             QLabel#dropTitle {
                 color: #EDE9E1;
                 font-size: 18px;
                 font-weight: 700;
+            }
+            QFrame#dropZone[selected="true"] QLabel#dropTitle {
+                color: #F4E4BF;
+                font-size: 27px;
+                font-weight: 800;
             }
             QLabel#dropSub {
                 color: #68645D;
@@ -1675,6 +1829,27 @@ class MainWindow(QMainWindow):
                 background: #D6B16B;
                 border-radius: 5px;
             }
+            QMessageBox {
+                background: #0F0F10;
+            }
+            QMessageBox QLabel {
+                color: #D6B16B;
+                font-size: 13px;
+                min-width: 340px;
+            }
+            QMessageBox QPushButton {
+                background: #1B1916;
+                color: #D6B16B;
+                border: 1px solid #6B5633;
+                border-radius: 7px;
+                min-width: 90px;
+                min-height: 32px;
+                font-weight: 750;
+            }
+            QMessageBox QPushButton:hover {
+                background: #D6B16B;
+                color: #11100E;
+            }
             QScrollBar:vertical {
                 background: #0D0D0E;
                 width: 8px;
@@ -1728,7 +1903,7 @@ class MainWindow(QMainWindow):
         self.nav_converter.setChecked(True)
         side.addStretch(1)
 
-        version = QLabel("Azra Converter\nv1.0.0")
+        version = QLabel(f"Azra Converter\nv{APP_VERSION}")
         version.setObjectName("version")
         version.setAlignment(Qt.AlignCenter)
         side.addWidget(version)
@@ -2261,6 +2436,7 @@ class MainWindow(QMainWindow):
 
         self.source_file = str(path)
         self.file_label.setText(f"Seçilen: {path.name}")
+        self.drop_zone.show_file(path)
         self.status.setText("Dosya hazır. Bir dönüşüm seçin.")
         self.update_buttons()
 
@@ -2291,9 +2467,10 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self.progress.setVisible(True)
+        self.progress.setVisible(False)
         self.progress.setValue(0)
         self.status.setText("Dönüştürülüyor...")
+        self._active_mode = mode
 
         for card in [self.pdf_excel_card, self.pdf_word_card,
                      self.excel_pdf_card, self.word_pdf_card,
@@ -2307,34 +2484,86 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.progress.setValue)
         self.worker.finished.connect(self.conversion_finished)
         self.worker.error.connect(self.conversion_error)
+        self.worker.cancelled.connect(self.conversion_cancelled)
         self.worker.finished.connect(self.thread.quit)
         self.worker.error.connect(self.thread.quit)
+        self.worker.cancelled.connect(self.thread.quit)
         self.thread.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(self.worker_thread_finished)
+
+        self.progress_dialog = ConversionProgressDialog(
+            Path(self.source_file).name, self
+        )
+        self.progress_dialog.cancelRequested.connect(self.cancel_conversion)
+        self.worker.progress.connect(self.progress_dialog.set_progress)
+        self.progress_dialog.show()
+        self.progress_dialog.raise_()
+        self.progress_dialog.activateWindow()
         self.thread.start()
+
+    def cancel_conversion(self):
+        if self.worker is not None:
+            self.status.setText("Dönüştürme iptal ediliyor...")
+            self.worker.cancel()
+
+    def _close_progress_dialog(self):
+        if self.progress_dialog is not None:
+            self.progress_dialog.finish()
+            self.progress_dialog.deleteLater()
+            self.progress_dialog = None
 
     def worker_thread_finished(self):
         self.thread = None
         self.worker = None
         self.update_buttons()
 
-    def conversion_finished(self, output):
-        self.progress.setValue(100)
-        self.status.setText("Dönüştürme tamamlandı.")
-        if self.source_file and self.worker:
-            self._save_history(self.worker.mode, self.source_file, output, True)
-        answer = QMessageBox.question(
-            self, "İşlem tamamlandı",
-            f"Dosya başarıyla oluşturuldu:\n\n{Path(output).name}\n\nKlasörü açmak ister misiniz?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+    def _ask_open_output_folder(self, output):
+        box = QMessageBox(self)
+        box.setWindowTitle("İşlem tamamlandı")
+        box.setIcon(QMessageBox.Information)
+        box.setText("DÖNÜŞTÜRME TAMAMLANDI")
+        box.setInformativeText(
+            f"Dosya başarıyla oluşturuldu:\n\n{Path(output).name}\n\n"
+            "Çıktı klasörünü açmak ister misiniz?"
         )
-        if answer == QMessageBox.Yes:
+        box.setStyleSheet("""
+            QMessageBox { background: #0F0F10; }
+            QMessageBox QLabel {
+                color: #D6B16B; font-size: 13px;
+                min-width: 430px; padding: 4px;
+            }
+            QMessageBox QPushButton {
+                background: #1B1916; color: #D6B16B;
+                border: 1px solid #6B5633; border-radius: 8px;
+                min-width: 120px; min-height: 36px; font-weight: 800;
+            }
+            QMessageBox QPushButton:hover {
+                background: #D6B16B; color: #11100E;
+            }
+        """)
+        open_button = box.addButton("KLASÖRÜ AÇ", QMessageBox.AcceptRole)
+        box.addButton("KAPAT", QMessageBox.RejectRole)
+        box.setDefaultButton(open_button)
+        box.exec()
+        return box.clickedButton() is open_button
+
+    def conversion_finished(self, output):
+        self._close_progress_dialog()
+        self.progress.setValue(100)
+        self.progress.setVisible(False)
+        self.status.setText("Dönüştürme tamamlandı.")
+        if self.source_file and self._active_mode:
+            self._save_history(self._active_mode, self.source_file, output, True)
+        self._active_mode = None
+        if self._ask_open_output_folder(output):
             os.startfile(str(Path(output).parent))
 
     def conversion_error(self, details):
-        if self.source_file and self.worker:
-            self._save_history(self.worker.mode, self.source_file, "", False)
+        self._close_progress_dialog()
+        if self.source_file and self._active_mode:
+            self._save_history(self._active_mode, self.source_file, "", False)
+        self._active_mode = None
         self.progress.setVisible(False)
         self.status.setText("Dönüştürme başarısız.")
         QMessageBox.critical(
@@ -2342,6 +2571,14 @@ class MainWindow(QMainWindow):
             "İşlem sırasında hata oluştu.\n\n" +
             (details or "Bilinmeyen hata")
         )
+        self.update_buttons()
+
+    def conversion_cancelled(self):
+        self._close_progress_dialog()
+        self._active_mode = None
+        self.progress.setVisible(False)
+        self.progress.setValue(0)
+        self.status.setText("Dönüştürme iptal edildi.")
         self.update_buttons()
 
 def main():
