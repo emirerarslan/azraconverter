@@ -124,11 +124,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
-          gh release create $env:GITHUB_REF_NAME `
-            "installer/AZRA-CONVERTER-SETUP-$version.exe" `
-            "release/AZRA-CONVERTER-UPDATE-$version.zip" `
-            "release/AZRA-CONVERTER-$version-DAGITIM.rar" `
-            "release/version.json" `
-            "release/checksums.sha256" `
-            --title "Azra Converter $version" `
-            --notes "Desteklenmeyen dekoratif simgeler kaldırıldı, kurulum metinleri güvenli karakterlerle güncellendi ve dağıtıma hazır RAR paketi eklendi."
+          $files = @(
+            "installer/AZRA-CONVERTER-SETUP-$version.exe",
+            "release/AZRA-CONVERTER-UPDATE-$version.zip",
+            "release/AZRA-CONVERTER-$version-DAGITIM.rar",
+            "release/version.json",
+            "release/checksums.sha256"
+          )
+          $notes = "Desteklenmeyen dekoratif simgeler kaldırıldı, kurulum metinleri güvenli karakterlerle güncellendi ve dağıtıma hazır RAR paketi eklendi."
+
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            gh release view $env:GITHUB_REF_NAME *> $null
+            if ($LASTEXITCODE -eq 0) {
+              gh release upload $env:GITHUB_REF_NAME $files --clobber
+              if ($LASTEXITCODE -eq 0) {
+                gh release edit $env:GITHUB_REF_NAME --title "Azra Converter $version" --notes $notes
+                exit $LASTEXITCODE
+              }
+            }
+            else {
+              gh release create $env:GITHUB_REF_NAME $files `
+                --title "Azra Converter $version" --notes $notes
+              if ($LASTEXITCODE -eq 0) {
+                exit 0
+              }
+            }
+            if ($attempt -lt 4) {
+              Start-Sleep -Seconds (15 * $attempt)
+            }
+          }
+          throw "GitHub release could not be published after four attempts."
