@@ -2,6 +2,9 @@ import sys
 import os
 import json
 import hashlib
+import csv
+import re
+import shutil
 import subprocess
 import tempfile
 import traceback
@@ -26,8 +29,19 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.1.0"
 UPDATE_CONFIG_FILE = "update_config.json"
+
+PDF_EXTENSIONS = {".pdf"}
+WORD_EXTENSIONS = {
+    ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm",
+    ".odt", ".rtf", ".txt",
+}
+SPREADSHEET_EXTENSIONS = {
+    ".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm",
+    ".ods", ".csv", ".tsv",
+}
+SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | WORD_EXTENSIONS | SPREADSHEET_EXTENSIONS
 
 
 def resource_path(name):
@@ -115,6 +129,21 @@ def clean_text(value):
     return str(value).replace("\x00", "").strip()
 
 
+def ocr_text_to_columns(line):
+    """Düz PDF metnindeki belirgin boşluk ve ayraçları Excel sütunlarına böler."""
+    text = clean_text(line)
+    if not text:
+        return []
+    if "\t" in text:
+        parts = re.split(r"\t+", text)
+    elif "|" in text:
+        parts = text.split("|")
+    else:
+        parts = re.split(r"\s{2,}", text)
+    values = [clean_text(part) for part in parts if clean_text(part)]
+    return values or [text]
+
+
 def unique_output(path):
     path = Path(path)
     if not path.exists():
@@ -126,6 +155,180 @@ def unique_output(path):
         if not candidate.exists():
             return candidate
         i += 1
+
+
+def _ps_quote(value):
+    """Bir yolu PowerShell tek tırnaklı sabitinde güvenli hale getirir."""
+    return str(Path(value).resolve()).replace("'", "''")
+
+
+def _run_powershell_automation(script, failure_message):
+    """Office COM otomasyonunu görünür pencere açmadan çalıştırır."""
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    result = subprocess.run(
+        [
+            "powershell", "-NoProfile", "-NonInteractive",
+            "-ExecutionPolicy", "Bypass", "-Command", script,
+        ],
+        capture_output=True,
+        text=True,
+        startupinfo=startupinfo,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = clean_text(result.stderr) or clean_text(result.stdout)
+        raise RuntimeError(
+            failure_message + (f"\n\nAyrıntı: {detail}" if detail else "")
+        )
+
+
+def find_libreoffice():
+    candidates = [
+        os.environ.get("LIBREOFFICE_PATH", ""),
+        shutil.which("soffice") or "",
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+    return next((item for item in candidates if item and Path(item).exists()), None)
+
+
+def libreoffice_convert(src, out, target_format):
+    """LibreOffice ile güvenli bir geçici klasörde biçim dönüştürür."""
+    soffice = find_libreoffice()
+    if not soffice:
+        raise RuntimeError("LibreOffice kurulu değil.")
+
+    filters = {
+        "pdf": "pdf",
+        "docx": "docx:Office Open XML Text",
+        "xlsx": "xlsx:Calc MS Excel 2007 XML",
+    }
+    if target_format not in filters:
+        raise ValueError(f"LibreOffice hedef biçimi desteklenmiyor: {target_format}")
+
+    src = Path(src).resolve()
+    out = Path(out).resolve()
+    with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
+        result = subprocess.run(
+            [
+                soffice, "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                "--convert-to", filters[target_format], "--outdir", temp_dir, str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        candidates = list(Path(temp_dir).glob(f"*.{target_format}"))
+        if result.returncode != 0 or not candidates:
+            detail = clean_text(result.stderr) or clean_text(result.stdout)
+            raise RuntimeError(
+                "LibreOffice dönüşümü tamamlayamadı."
+                + (f"\n\nAyrıntı: {detail}" if detail else "")
+            )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(candidates[0], out)
+    return out
+
+
+def word_to_docx_with_microsoft_word(src, out):
+    script = (
+        "$ErrorActionPreference='Stop'; $word=$null; $document=$null; "
+        "$word=New-Object -ComObject Word.Application; $word.Visible=$false; "
+        "$word.DisplayAlerts=0; try { "
+        f"$document=$word.Documents.Open('{_ps_quote(src)}',$false,$true); "
+        f"$document.SaveAs2('{_ps_quote(out)}',16); "
+        "} finally { if ($document) {$document.Close($false)}; "
+        "if ($word) {$word.Quit()} }"
+    )
+    _run_powershell_automation(script, "Microsoft Word belgeyi DOCX biçimine çeviremedi.")
+    if not Path(out).exists():
+        raise RuntimeError("Microsoft Word DOCX çıktısını oluşturamadı.")
+
+
+def excel_to_xlsx_with_microsoft_excel(src, out):
+    script = (
+        "$ErrorActionPreference='Stop'; $excel=$null; $book=$null; "
+        "$excel=New-Object -ComObject Excel.Application; $excel.Visible=$false; "
+        "$excel.DisplayAlerts=$false; try { "
+        f"$book=$excel.Workbooks.Open('{_ps_quote(src)}',0,$true); "
+        f"$book.SaveAs('{_ps_quote(out)}',51); "
+        "} finally { if ($book) {$book.Close($false)}; "
+        "if ($excel) {$excel.Quit()} }"
+    )
+    _run_powershell_automation(script, "Microsoft Excel dosyayı XLSX biçimine çeviremedi.")
+    if not Path(out).exists():
+        raise RuntimeError("Microsoft Excel XLSX çıktısını oluşturamadı.")
+
+
+def _normalise_word_document(src, temp_dir):
+    src = Path(src)
+    if src.suffix.lower() == ".docx":
+        return src
+    target = Path(temp_dir) / f"{src.stem}.docx"
+    try:
+        word_to_docx_with_microsoft_word(src, target)
+    except Exception as word_error:
+        try:
+            libreoffice_convert(src, target, "docx")
+        except Exception as libreoffice_error:
+            raise RuntimeError(
+                f"{src.suffix.upper()} belgesi açılamadı. Microsoft Word veya "
+                f"LibreOffice gereklidir.\n\nWord: {word_error}\nLibreOffice: {libreoffice_error}"
+            )
+    return target
+
+
+def _normalise_spreadsheet(src, temp_dir):
+    """Yaygın tablo biçimlerini kayıpsız işlem için XLSX'e normalleştirir."""
+    from openpyxl import Workbook
+
+    src = Path(src)
+    if src.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+        return src
+
+    target = Path(temp_dir) / f"{src.stem}.xlsx"
+    if src.suffix.lower() in {".csv", ".tsv"}:
+        raw = src.read_bytes()
+        decoded = None
+        for encoding in ("utf-8-sig", "utf-8", "cp1254", "latin-1"):
+            try:
+                decoded = raw.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        if decoded is None:
+            raise RuntimeError("CSV/TSV dosyasının karakter kodlaması okunamadı.")
+
+        delimiter = "\t"
+        if src.suffix.lower() == ".csv":
+            try:
+                delimiter = csv.Sniffer().sniff(
+                    decoded[:8192], delimiters=",;\t|"
+                ).delimiter
+            except csv.Error:
+                delimiter = ";" if decoded.count(";") > decoded.count(",") else ","
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Veriler"
+        for row in csv.reader(decoded.splitlines(), delimiter=delimiter):
+            sheet.append(row)
+        workbook.save(target)
+        return target
+
+    try:
+        excel_to_xlsx_with_microsoft_excel(src, target)
+    except Exception as excel_error:
+        try:
+            libreoffice_convert(src, target, "xlsx")
+        except Exception as libreoffice_error:
+            raise RuntimeError(
+                f"{src.suffix.upper()} çalışma kitabı açılamadı. Microsoft Excel "
+                f"veya LibreOffice gereklidir.\n\nExcel: {excel_error}\n"
+                f"LibreOffice: {libreoffice_error}"
+            )
+    return target
 
 
 
@@ -440,6 +643,18 @@ def pdf_to_word(src, progress):
         src.with_name(src.stem + "_Word.docx")
     )
 
+    # Word'ün PDF yeniden akış motoru metin kutularını, görselleri ve sayfa
+    # düzenini yerleşik çıkarıcıdan daha başarılı korur. Kullanılabiliyorsa önce
+    # onu dener, başarısız olursa aşağıdaki OCR/tablo yoluna geçeriz.
+    try:
+        progress.emit(5)
+        word_to_docx_with_microsoft_word(src, out)
+        progress.emit(100)
+        return out
+    except Exception:
+        if out.exists():
+            out.unlink()
+
     doc = Document()
 
     with pdfplumber.open(str(src)) as pdf:
@@ -560,6 +775,22 @@ def make_pdf_styles():
     }
 
 
+def excel_to_pdf_with_microsoft_excel(src, out):
+    """Excel'in baskı alanı, grafik ve sayfa ayarlarını koruyarak PDF üretir."""
+    script = (
+        "$ErrorActionPreference='Stop'; $excel=$null; $book=$null; "
+        "$excel=New-Object -ComObject Excel.Application; $excel.Visible=$false; "
+        "$excel.DisplayAlerts=$false; try { "
+        f"$book=$excel.Workbooks.Open('{_ps_quote(src)}',0,$true); "
+        f"$book.ExportAsFixedFormat(0,'{_ps_quote(out)}'); "
+        "} finally { if ($book) {$book.Close($false)}; "
+        "if ($excel) {$excel.Quit()} }"
+    )
+    _run_powershell_automation(script, "Microsoft Excel PDF çıktısını oluşturamadı.")
+    if not Path(out).exists():
+        raise RuntimeError("Microsoft Excel PDF çıktısını oluşturamadı.")
+
+
 def excel_to_pdf(src, progress):
     from openpyxl import load_workbook
     from reportlab.lib import colors
@@ -569,6 +800,29 @@ def excel_to_pdf(src, progress):
 
     src = Path(src)
     out = unique_output(src.with_name(src.stem + "_PDF.pdf"))
+
+    progress.emit(5)
+    try:
+        excel_to_pdf_with_microsoft_excel(src, out)
+        progress.emit(100)
+        return out
+    except Exception:
+        if out.exists():
+            out.unlink()
+
+    try:
+        libreoffice_convert(src, out, "pdf")
+        progress.emit(100)
+        return out
+    except Exception:
+        if out.exists():
+            out.unlink()
+
+    if src.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+        raise RuntimeError(
+            f"{src.suffix.upper()} dosyasını PDF'e dönüştürmek için Microsoft "
+            "Excel veya LibreOffice kurulu olmalıdır."
+        )
 
     wb = load_workbook(str(src), data_only=True)
     sheet_names = wb.sheetnames
@@ -641,37 +895,21 @@ def excel_to_pdf(src, progress):
 
 
 def word_to_pdf_with_microsoft_word(src, out):
-    """Eski .doc belgelerini Word'ün kendi PDF dışa aktarmasıyla dönüştürür."""
-    def ps_quote(value):
-        return str(value).replace("'", "''")
-
+    """Word'ün kendi PDF dışa aktarmasıyla düzeni yüksek sadakatle korur."""
     script = (
-        "$ErrorActionPreference = 'Stop'; "
-        "$word = New-Object -ComObject Word.Application; "
+        "$ErrorActionPreference='Stop'; $word=$null; $document=$null; "
+        "$word=New-Object -ComObject Word.Application; $word.Visible=$false; "
+        "$word.DisplayAlerts=0; "
         "try { "
-        f"$document = $word.Documents.Open('{ps_quote(src)}', $false, $true); "
-        f"$document.ExportAsFixedFormat('{ps_quote(out)}', 17); "
+        f"$document=$word.Documents.Open('{_ps_quote(src)}',$false,$true); "
+        f"$document.ExportAsFixedFormat('{_ps_quote(out)}',17); "
         "} finally { "
-        "if ($document) { $document.Close($false) }; "
-        "if ($word) { $word.Quit() } "
+        "if ($document) {$document.Close($false)}; if ($word) {$word.Quit()} "
         "}"
     )
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = subprocess.SW_HIDE
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-        capture_output=True,
-        text=True,
-        startupinfo=startupinfo,
-        check=False,
-    )
-    if result.returncode != 0 or not out.exists():
-        detail = clean_text(result.stderr) or clean_text(result.stdout)
-        raise RuntimeError(
-            "Bu .doc belgesini dönüştürmek için bilgisayarda Microsoft Word kurulu olmalıdır."
-            + (f"\n\nAyrıntı: {detail}" if detail else "")
-        )
+    _run_powershell_automation(script, "Microsoft Word PDF çıktısını oluşturamadı.")
+    if not Path(out).exists():
+        raise RuntimeError("Microsoft Word PDF çıktısını oluşturamadı.")
 
 
 def word_to_pdf(src, progress):
@@ -684,13 +922,30 @@ def word_to_pdf(src, progress):
     src = Path(src)
     out = unique_output(src.with_name(src.stem + "_PDF.pdf"))
 
-    # python-docx eski ikili .doc biçimini okuyamaz. Word, biçimi koruyarak
-    # hem .doc hem de .docx belgelerini PDF olarak dışa aktarabilir.
-    if src.suffix.lower() == ".doc":
-        progress.emit(10)
+    # Önce Word, sonra LibreOffice: bu iki yol resim, üstbilgi, dipnot,
+    # grafik ve sayfa sonlarını yerleşik metin tabanlı yoldan daha iyi korur.
+    progress.emit(5)
+    try:
         word_to_pdf_with_microsoft_word(src, out)
         progress.emit(100)
         return out
+    except Exception:
+        if out.exists():
+            out.unlink()
+
+    try:
+        libreoffice_convert(src, out, "pdf")
+        progress.emit(100)
+        return out
+    except Exception:
+        if out.exists():
+            out.unlink()
+
+    if src.suffix.lower() != ".docx":
+        raise RuntimeError(
+            f"{src.suffix.upper()} belgesini PDF'e dönüştürmek için Microsoft "
+            "Word veya LibreOffice kurulu olmalıdır."
+        )
 
     document = Document(str(src))
     styles = make_pdf_styles()
@@ -772,6 +1027,132 @@ def word_to_pdf(src, progress):
         story.append(Paragraph("Belgede dönüştürülebilecek içerik bulunamadı.", styles["body"]))
 
     doc.build(story)
+    return out
+
+
+def word_to_excel(src, progress):
+    """Word metnini ve her tabloyu düzenlenebilir Excel sayfalarına aktarır."""
+    from docx import Document
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    src = Path(src)
+    out = unique_output(src.with_name(src.stem + "_Excel.xlsx"))
+    with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
+        normalised = _normalise_word_document(src, temp_dir)
+        document = Document(str(normalised))
+        workbook = Workbook()
+        text_sheet = workbook.active
+        text_sheet.title = "Belge Metni"
+        text_sheet.append(["Sıra", "Tür", "İçerik"])
+
+        paragraphs = [p for p in document.paragraphs if clean_text(p.text)]
+        total = max(len(paragraphs) + len(document.tables), 1)
+        done = 0
+        for number, paragraph in enumerate(paragraphs, start=1):
+            style_name = clean_text(getattr(paragraph.style, "name", ""))
+            kind = "Başlık" if any(
+                marker in style_name.lower() for marker in ("title", "heading", "başlık")
+            ) else "Metin"
+            text_sheet.append([number, kind, clean_text(paragraph.text)])
+            done += 1
+            progress.emit(int(done / total * 90))
+
+        for table_number, source_table in enumerate(document.tables, start=1):
+            sheet = workbook.create_sheet(f"Tablo {table_number}")
+            for row in source_table.rows:
+                sheet.append([clean_text(cell.text) for cell in row.cells])
+            done += 1
+            progress.emit(int(done / total * 90))
+
+        header_fill = PatternFill("solid", fgColor="D6B16B")
+        for sheet in workbook.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for cell in sheet[1]:
+                cell.font = Font(bold=True)
+                cell.fill = header_fill
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for column in sheet.columns:
+                letter = column[0].column_letter
+                max_length = max((len(clean_text(cell.value)) for cell in column), default=0)
+                sheet.column_dimensions[letter].width = min(max(max_length + 2, 10), 60)
+                for cell in column:
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        workbook.save(out)
+    progress.emit(100)
+    return out
+
+
+def excel_to_word(src, progress):
+    """Çalışma kitabındaki tüm sayfaları düzenlenebilir Word tablolarına aktarır."""
+    from docx import Document
+    from docx.enum.section import WD_ORIENT
+    from docx.shared import Inches, Pt
+    from openpyxl import load_workbook
+
+    src = Path(src)
+    out = unique_output(src.with_name(src.stem + "_Word.docx"))
+    with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
+        normalised = _normalise_spreadsheet(src, temp_dir)
+        values_book = load_workbook(str(normalised), data_only=True, read_only=True)
+        formulas_book = load_workbook(str(normalised), data_only=False, read_only=True)
+        document = Document()
+        normal_style = document.styles["Normal"]
+        normal_style.font.name = "Arial"
+        normal_style.font.size = Pt(9)
+
+        total = max(len(values_book.sheetnames), 1)
+        needs_landscape = any(values_book[name].max_column > 6 for name in values_book.sheetnames)
+        if needs_landscape:
+            section = document.sections[0]
+            section.orientation = WD_ORIENT.LANDSCAPE
+            section.page_width, section.page_height = section.page_height, section.page_width
+            section.left_margin = section.right_margin = Inches(0.45)
+
+        for index, sheet_name in enumerate(values_book.sheetnames, start=1):
+            value_sheet = values_book[sheet_name]
+            formula_sheet = formulas_book[sheet_name]
+            if index > 1:
+                document.add_page_break()
+            document.add_heading(clean_text(sheet_name), level=1)
+
+            rows = []
+            for value_row, formula_row in zip(
+                value_sheet.iter_rows(values_only=True),
+                formula_sheet.iter_rows(values_only=True),
+            ):
+                values = []
+                for cached, formula in zip(value_row, formula_row):
+                    value = cached if cached is not None else formula
+                    values.append(clean_text(value))
+                while values and values[-1] == "":
+                    values.pop()
+                if values:
+                    rows.append(values)
+
+            if rows:
+                max_columns = max(len(row) for row in rows)
+                table = document.add_table(rows=len(rows), cols=max_columns)
+                table.style = "Table Grid"
+                for row_index, values in enumerate(rows):
+                    for column_index in range(max_columns):
+                        table.cell(row_index, column_index).text = (
+                            values[column_index] if column_index < len(values) else ""
+                        )
+                for cell in table.rows[0].cells:
+                    for run in cell.paragraphs[0].runs:
+                        run.bold = True
+            else:
+                document.add_paragraph("Bu sayfada veri bulunamadı.")
+
+            progress.emit(int(index / total * 95))
+
+        document.save(out)
+        values_book.close()
+        formulas_book.close()
+    progress.emit(100)
     return out
 
 
@@ -886,6 +1267,10 @@ class ConverterWorker(QObject):
                 result = excel_to_pdf(self.source, self.progress)
             elif self.mode == "word_pdf":
                 result = word_to_pdf(self.source, self.progress)
+            elif self.mode == "word_excel":
+                result = word_to_excel(self.source, self.progress)
+            elif self.mode == "excel_word":
+                result = excel_to_word(self.source, self.progress)
             else:
                 raise ValueError("Geçersiz dönüşüm seçildi.")
 
@@ -918,7 +1303,7 @@ class DropZone(QFrame):
         title.setAlignment(Qt.AlignCenter)
         title.setObjectName("dropTitle")
 
-        sub = QLabel("PDF • Excel • Word")
+        sub = QLabel("PDF • DOC/DOCX • XLS/XLSX • ODT/ODS • CSV/RTF")
         sub.setAlignment(Qt.AlignCenter)
         sub.setObjectName("dropSub")
 
@@ -1257,7 +1642,7 @@ class MainWindow(QMainWindow):
         title.setObjectName("pageTitle")
         heading.addWidget(title)
 
-        subtitle = QLabel("PDF, Word ve Excel arasında hızlı ve güvenli dönüşüm.")
+        subtitle = QLabel("PDF, Word ve Excel arasında altı yönlü, yüksek kaliteli dönüşüm.")
         subtitle.setObjectName("pageSubtitle")
         heading.addWidget(subtitle)
 
@@ -1296,16 +1681,22 @@ class MainWindow(QMainWindow):
         self.pdf_word_card = ConversionCard("PDF  →  WORD", "OCR + düzenlenebilir metin")
         self.excel_pdf_card = ConversionCard("EXCEL  →  PDF", "Sayfa düzenini koru")
         self.word_pdf_card = ConversionCard("WORD  →  PDF", "Belgeyi PDF olarak dışa aktar")
+        self.word_excel_card = ConversionCard("WORD  →  EXCEL", "Metin + tabloları sayfalara aktar")
+        self.excel_word_card = ConversionCard("EXCEL  →  WORD", "Tüm çalışma sayfalarını aktar")
 
         cards.addWidget(self.pdf_excel_card, 0, 0)
         cards.addWidget(self.pdf_word_card, 0, 1)
         cards.addWidget(self.excel_pdf_card, 1, 0)
         cards.addWidget(self.word_pdf_card, 1, 1)
+        cards.addWidget(self.word_excel_card, 2, 0)
+        cards.addWidget(self.excel_word_card, 2, 1)
 
         self.pdf_excel_card.button.clicked.connect(lambda: self.start_conversion("pdf_excel"))
         self.pdf_word_card.button.clicked.connect(lambda: self.start_conversion("pdf_word"))
         self.excel_pdf_card.button.clicked.connect(lambda: self.start_conversion("excel_pdf"))
         self.word_pdf_card.button.clicked.connect(lambda: self.start_conversion("word_pdf"))
+        self.word_excel_card.button.clicked.connect(lambda: self.start_conversion("word_excel"))
+        self.excel_word_card.button.clicked.connect(lambda: self.start_conversion("excel_word"))
 
         content_layout.addLayout(cards)
 
@@ -1361,6 +1752,8 @@ class MainWindow(QMainWindow):
             "pdf_word": "PDF → Word",
             "excel_pdf": "Excel → PDF",
             "word_pdf": "Word → PDF",
+            "word_excel": "Word → Excel",
+            "excel_word": "Excel → Word",
         }
         data = self._load_history()
         data.insert(0, {
@@ -1626,11 +2019,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(purpose_title)
 
         purpose = QLabel(
-            "PDF, Word ve Excel belgeleri arasında hızlı ve kolay "
-            "dönüştürme işlemleri yapmak.<br><br>"
-            "PDF → Excel ve PDF → Word işlemlerinde OCR desteği ile "
-            "taranmış belgelerdeki metinleri algılayarak düzenlenebilir "
-            "çıktılar oluşturmak."
+            "PDF, Word ve Excel belgeleri arasında altı yönlü dönüşüm yapmak.<br><br>"
+            "PDF → Excel ve PDF → Word işlemlerinde OCR desteğiyle taranmış "
+            "belgelerden içerik çıkarılır. Word/Excel → PDF işlemlerinde önce "
+            "Microsoft Office, ardından LibreOffice kullanılarak sayfa düzeni "
+            "mümkün olan en yüksek kalitede korunur.<br><br>"
+            "Yaygın biçimler: PDF; DOC, DOCX, DOCM, DOT/DOTX, ODT, RTF, TXT; "
+            "XLS, XLSX, XLSM, XLSB, XLT/XLTX, ODS, CSV ve TSV."
         )
         purpose.setAlignment(Qt.AlignCenter)
         purpose.setWordWrap(True)
@@ -1687,16 +2082,16 @@ class MainWindow(QMainWindow):
             self,
             "Dosya Seç",
             "",
-            "Desteklenen Dosyalar (*.pdf *.xlsx *.xlsm *.doc *.docx);;PDF (*.pdf);;Excel (*.xlsx *.xlsm);;Word (*.doc *.docx)"
+            "Desteklenen Dosyalar (*.pdf *.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt *.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv);;PDF (*.pdf);;Word (*.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt);;Excel (*.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv)"
         )
         if path:
             self.set_file(path)
 
     def set_file(self, path):
         path = Path(path)
-        if path.suffix.lower() not in [".pdf", ".xlsx", ".xlsm", ".doc", ".docx"]:
+        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             QMessageBox.warning(self, "Desteklenmeyen dosya",
-                                "Bu dosya türü desteklenmiyor.\n\nPDF, Excel veya Word dosyası seçin.")
+                                "Bu dosya türü desteklenmiyor.\n\nPDF veya yaygın bir Word/Excel dosyası seçin.")
             return
 
         self.source_file = str(path)
@@ -1706,14 +2101,29 @@ class MainWindow(QMainWindow):
 
     def update_buttons(self):
         ext = Path(self.source_file).suffix.lower() if self.source_file else ""
-        self.pdf_excel_card.button.setEnabled(ext == ".pdf")
-        self.pdf_word_card.button.setEnabled(ext == ".pdf")
-        self.excel_pdf_card.button.setEnabled(ext in [".xlsx", ".xlsm"])
-        self.word_pdf_card.button.setEnabled(ext in [".doc", ".docx"])
+        self.pdf_excel_card.button.setEnabled(ext in PDF_EXTENSIONS)
+        self.pdf_word_card.button.setEnabled(ext in PDF_EXTENSIONS)
+        self.excel_pdf_card.button.setEnabled(ext in SPREADSHEET_EXTENSIONS)
+        self.excel_word_card.button.setEnabled(ext in SPREADSHEET_EXTENSIONS)
+        self.word_pdf_card.button.setEnabled(ext in WORD_EXTENSIONS)
+        self.word_excel_card.button.setEnabled(ext in WORD_EXTENSIONS)
 
     def start_conversion(self, mode):
         if not self.source_file:
             QMessageBox.information(self, "Dosya seçin", "Önce bir dosya seçin.")
+            return
+
+        ext = Path(self.source_file).suffix.lower()
+        allowed_modes = (
+            {"pdf_excel", "pdf_word"} if ext in PDF_EXTENSIONS else
+            {"excel_pdf", "excel_word"} if ext in SPREADSHEET_EXTENSIONS else
+            {"word_pdf", "word_excel"} if ext in WORD_EXTENSIONS else set()
+        )
+        if mode not in allowed_modes:
+            QMessageBox.warning(
+                self, "Geçersiz dönüşüm",
+                "Seçilen dosya bu dönüşüm türüyle uyumlu değil."
+            )
             return
 
         self.progress.setVisible(True)
@@ -1721,7 +2131,8 @@ class MainWindow(QMainWindow):
         self.status.setText("Dönüştürülüyor...")
 
         for card in [self.pdf_excel_card, self.pdf_word_card,
-                     self.excel_pdf_card, self.word_pdf_card]:
+                     self.excel_pdf_card, self.word_pdf_card,
+                     self.word_excel_card, self.excel_word_card]:
             card.button.setEnabled(False)
 
         self.thread = QThread()
