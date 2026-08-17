@@ -5,3 +5,4 @@ dist/
 installer/*.exe
 installer/*.rar
 installer/*.zip
+installer/*.sha256
