@@ -1,6 +1,8 @@
 {
-  "version": "1.1.0",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.0.exe",
+  "version": "1.1.1",
+  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.1.exe",
   "sha256": "",
-  "notes": "Altı yönlü PDF, Word ve Excel dönüşümü; geniş dosya biçimi desteği ve 429 hatasına dayanıklı güncelleme sistemi."
+  "package_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-1.1.1.zip",
+  "package_sha256": "",
+  "notes": "Kurulum EXE'si açmadan program içinden güncelleme ve yüksek çözünürlüklü yeni uygulama ikonu."
 }

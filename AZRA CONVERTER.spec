@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['main_azra_premium_v2.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[('azra_gold.ico', '.'), ('azra_gold_logo_real_transparent.png', '.'), ('C:/Program Files/Tesseract-OCR', 'tesseract')],

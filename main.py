@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import traceback
+import zipfile
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urljoin, urlsplit
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -106,25 +107,71 @@ def normalise_update_manifest(payload, source_url):
             ),
             None,
         )
+        update_package = next(
+            (
+                asset for asset in assets
+                if clean_text(asset.get("name")).lower().endswith(".zip")
+                and "update" in clean_text(asset.get("name")).lower()
+            ),
+            None,
+        )
         download_url = clean_text((installer or {}).get("browser_download_url"))
         digest = clean_text((installer or {}).get("digest"))
         sha256 = digest.split(":", 1)[1] if digest.lower().startswith("sha256:") else ""
+        package_url = clean_text((update_package or {}).get("browser_download_url"))
+        package_digest = clean_text((update_package or {}).get("digest"))
+        package_sha256 = (
+            package_digest.split(":", 1)[1]
+            if package_digest.lower().startswith("sha256:") else ""
+        )
         return {
             "version": version,
             "download_url": download_url,
             "sha256": sha256,
+            "package_url": package_url,
+            "package_sha256": package_sha256,
             "notes": clean_text(payload.get("body"))[:300],
         }
 
     download_url = clean_text(payload.get("download_url"))
     if download_url:
         download_url = urljoin(source_url, download_url)
+    package_url = clean_text(payload.get("package_url"))
+    if package_url:
+        package_url = urljoin(source_url, package_url)
     return {
         "version": clean_text(payload.get("version")),
         "download_url": download_url,
         "sha256": clean_text(payload.get("sha256")),
+        "package_url": package_url,
+        "package_sha256": clean_text(payload.get("package_sha256")),
         "notes": clean_text(payload.get("notes")),
     }
+
+
+def extract_update_package(package_path, destination):
+    """Doğrulanmış ZIP'i yol geçişi ve sembolik bağlantı saldırılarına karşı açar."""
+    package_path = Path(package_path).resolve()
+    destination = Path(destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(package_path) as archive:
+        for member in archive.infolist():
+            member_path = Path(member.filename.replace("\\", "/"))
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise RuntimeError("Güncelleme paketi güvenli olmayan bir yol içeriyor.")
+            # Unix ZIP'lerinde sembolik bağlantı türü üst 16 bitte tutulur.
+            if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                raise RuntimeError("Güncelleme paketi sembolik bağlantı içeriyor.")
+            target = (destination / member_path).resolve()
+            if destination != target and destination not in target.parents:
+                raise RuntimeError("Güncelleme paketi hedef klasör dışına çıkıyor.")
+        archive.extractall(destination)
+
+    executable = next(destination.rglob("AZRA CONVERTER.exe"), None)
+    if executable is None:
+        raise RuntimeError("Güncelleme paketinde uygulama dosyası bulunamadı.")
+    return executable.parent
 
 
 
@@ -1256,6 +1303,8 @@ class UpdateWorker(QObject):
             "is_new": version_key(latest) > version_key(APP_VERSION),
             "download_url": manifest["download_url"],
             "sha256": manifest["sha256"],
+            "package_url": manifest.get("package_url", ""),
+            "package_sha256": manifest.get("package_sha256", ""),
             "notes": manifest["notes"],
         })
 
@@ -1958,13 +2007,21 @@ class MainWindow(QMainWindow):
 
     def update_check_finished(self, result):
         latest = result["version"]
-        if result["is_new"] and result["download_url"]:
-            self._update_download_url = result["download_url"]
+        package_url = result.get("package_url", "")
+        installer_url = result.get("download_url", "")
+        if result["is_new"] and (package_url or installer_url):
+            self._update_kind = "package" if package_url else "installer"
+            self._update_download_url = package_url or installer_url
             self._update_version = latest
-            self._update_checksum = result["sha256"]
+            self._update_checksum = (
+                result.get("package_sha256", "")
+                if package_url else result.get("sha256", "")
+            )
             note = f" — {result['notes']}" if result["notes"] else ""
             self.update_status.setText(f"Yeni sürüm hazır: v{latest}{note}")
-            self.update_button.setText("YENİ SÜRÜMÜ YÜKLE")
+            self.update_button.setText(
+                "PROGRAM İÇİNDE GÜNCELLE" if package_url else "YENİ SÜRÜMÜ YÜKLE"
+            )
             self.update_button.setEnabled(True)
             try:
                 self.update_button.clicked.disconnect()
@@ -2012,10 +2069,16 @@ class MainWindow(QMainWindow):
     def update_download_progress(self, progress):
         self.update_status.setText(f"Güncelleme indiriliyor... %{progress}")
 
-    def update_download_finished(self, installer_path):
-        self.update_status.setText("Güncelleme hazırlanıyor. Program yeniden başlatılacak...")
-        self.update_button.setText("YÜKLEME BAŞLATILIYOR")
-        self._launch_update_installer(installer_path)
+    def update_download_finished(self, downloaded_path):
+        self.update_status.setText("Güncelleme uygulanıyor. Program yeniden başlatılacak...")
+        self.update_button.setText("GÜNCELLEME UYGULANIYOR")
+        try:
+            if getattr(self, "_update_kind", "installer") == "package":
+                self._launch_in_app_update(downloaded_path)
+            else:
+                self._launch_update_installer(downloaded_path)
+        except Exception as exc:
+            self.update_download_error(str(exc))
 
     def update_download_error(self, message):
         self.update_status.setText(f"Güncelleme indirilemedi: {message}")
@@ -2036,6 +2099,44 @@ class MainWindow(QMainWindow):
         )
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.Popen(["cmd", "/c", str(helper)], creationflags=creationflags)
+        QTimer.singleShot(350, QApplication.instance().quit)
+
+    def _launch_in_app_update(self, package_path):
+        """ZIP paketini doğrulanmış staging alanından uygulama klasörüne geçirir."""
+        import ctypes
+
+        if not getattr(sys, "frozen", False):
+            raise RuntimeError("Program içi güncelleme yalnızca kurulu uygulamada çalışır.")
+
+        update_root = Path(tempfile.mkdtemp(prefix="AzraConverterUpdate-"))
+        staged_app = extract_update_package(package_path, update_root / "payload")
+        current_executable = Path(sys.executable).resolve()
+        install_dir = current_executable.parent
+        helper = update_root / "apply_update.ps1"
+        helper.write_text(
+            "$ErrorActionPreference = 'Stop'\r\n"
+            f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\r\n"
+            f"$source = '{_ps_quote(staged_app)}'\r\n"
+            f"$target = '{_ps_quote(install_dir)}'\r\n"
+            f"$exe = '{_ps_quote(current_executable)}'\r\n"
+            "$arguments = @($source, $target, '/E', '/COPY:DAT', '/R:5', '/W:1', "
+            "'/NFL', '/NDL', '/NJH', '/NJS', '/NP')\r\n"
+            "$copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList $arguments "
+            "-Wait -PassThru -WindowStyle Hidden\r\n"
+            "if ($copy.ExitCode -gt 7) { throw \"Güncelleme dosyaları kopyalanamadı: $($copy.ExitCode)\" }\r\n"
+            "Start-Process -FilePath $exe\r\n"
+            f"Remove-Item -LiteralPath '{_ps_quote(Path(package_path))}' -Force -ErrorAction SilentlyContinue\r\n"
+            "Remove-Item -LiteralPath $source -Recurse -Force -ErrorAction SilentlyContinue\r\n"
+            "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n",
+            encoding="utf-8-sig",
+        )
+
+        parameters = f'-NoProfile -ExecutionPolicy Bypass -File "{helper}"'
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", "powershell.exe", parameters, str(update_root), 0
+        )
+        if result <= 32:
+            raise RuntimeError("Güncelleme için yönetici izni verilmedi.")
         QTimer.singleShot(350, QApplication.instance().quit)
 
     def show_about(self):

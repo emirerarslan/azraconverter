@@ -45,6 +45,17 @@ jobs:
             --add-data "C:\Program Files\Tesseract-OCR;tesseract" `
             main.py
 
+      - name: Create in-app update package
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item -LiteralPath update_config.json -Destination "dist\AZRA CONVERTER\update_config.json" -Force
+          Copy-Item -LiteralPath azra_gold.ico -Destination "dist\AZRA CONVERTER\azra_gold.ico" -Force
+          Compress-Archive -Path "dist\AZRA CONVERTER\*" `
+            -DestinationPath "release\AZRA-CONVERTER-UPDATE-$version.zip" `
+            -CompressionLevel Optimal -Force
+
       - name: Build installer
         shell: powershell
         run: |
@@ -69,16 +80,22 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           $installer = "installer/AZRA-CONVERTER-SETUP-$version.exe"
+          $package = "release/AZRA-CONVERTER-UPDATE-$version.zip"
           if (-not (Test-Path -LiteralPath $installer)) {
             throw "Installer was not produced: $installer"
           }
+          if (-not (Test-Path -LiteralPath $package)) {
+            throw "In-app update package was not produced: $package"
+          }
           $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
-          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $packageSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant()
           $manifest = [ordered]@{
             version = $version
             download_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-$version.exe"
             sha256 = $sha256
-            notes = "Altı yönlü PDF, Word ve Excel dönüşümü; geniş dosya biçimi desteği ve dayanıklı güncelleme sistemi."
+            package_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-$version.zip"
+            package_sha256 = $packageSha256
+            notes = "Kurulum EXE'si açmadan program içinden güncelleme ve yüksek çözünürlüklü yeni uygulama ikonu."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           Set-Content -LiteralPath release/installer.sha256 -Value "$sha256  AZRA-CONVERTER-SETUP-$version.exe" -Encoding ascii
@@ -91,7 +108,8 @@ jobs:
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           gh release create $env:GITHUB_REF_NAME `
             "installer/AZRA-CONVERTER-SETUP-$version.exe" `
+            "release/AZRA-CONVERTER-UPDATE-$version.zip" `
             "release/version.json" `
             "release/installer.sha256" `
             --title "Azra Converter $version" `
-            --notes "Altı yönlü PDF, Word ve Excel dönüşümü, geniş biçim desteği ve 429 hatasına dayanıklı güncelleme sistemi."
+            --notes "Program içinden kurulum açmadan güncelleme, çoklu güncelleme kanalı ve yüksek çözünürlüklü yeni uygulama ikonu."

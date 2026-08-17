@@ -2,6 +2,7 @@ import sys
 import tempfile
 import types
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -64,6 +65,8 @@ class ConversionTests(unittest.TestCase):
                 "version": "1.2.0",
                 "download_url": "AZRA-SETUP.exe",
                 "sha256": "abc123",
+                "package_url": "AZRA-UPDATE.zip",
+                "package_sha256": "def456",
                 "notes": "Test sürümü",
             },
             "https://example.com/updates/version.json",
@@ -74,6 +77,11 @@ class ConversionTests(unittest.TestCase):
             "https://example.com/updates/AZRA-SETUP.exe",
         )
         self.assertEqual(manifest["sha256"], "abc123")
+        self.assertEqual(
+            manifest["package_url"],
+            "https://example.com/updates/AZRA-UPDATE.zip",
+        )
+        self.assertEqual(manifest["package_sha256"], "def456")
 
     def test_github_release_api_manifest_is_normalised(self):
         manifest = main.normalise_update_manifest(
@@ -85,7 +93,12 @@ class ConversionTests(unittest.TestCase):
                         "name": "AZRA-CONVERTER-SETUP-1.1.0.exe",
                         "browser_download_url": "https://example.com/setup.exe",
                         "digest": "sha256:abcdef",
-                    }
+                    },
+                    {
+                        "name": "AZRA-CONVERTER-UPDATE-1.1.1.zip",
+                        "browser_download_url": "https://example.com/update.zip",
+                        "digest": "sha256:123456",
+                    },
                 ],
             },
             "https://api.github.com/repos/example/app/releases/latest",
@@ -93,6 +106,29 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(manifest["version"], "1.1.0")
         self.assertEqual(manifest["download_url"], "https://example.com/setup.exe")
         self.assertEqual(manifest["sha256"], "abcdef")
+        self.assertEqual(manifest["package_url"], "https://example.com/update.zip")
+        self.assertEqual(manifest["package_sha256"], "123456")
+
+    def test_update_package_is_safely_extracted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            package = folder / "update.zip"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("AZRA CONVERTER.exe", b"binary")
+                archive.writestr("_internal/library.dll", b"library")
+            app_folder = main.extract_update_package(package, folder / "staging")
+            self.assertEqual(app_folder, folder / "staging")
+            self.assertTrue((app_folder / "_internal" / "library.dll").exists())
+
+    def test_update_package_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            package = folder / "unsafe.zip"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("../outside.txt", b"unsafe")
+                archive.writestr("AZRA CONVERTER.exe", b"binary")
+            with self.assertRaises(RuntimeError):
+                main.extract_update_package(package, folder / "staging")
 
     def test_update_urls_keep_fallbacks_without_duplicates(self):
         urls = main.update_manifest_urls({
