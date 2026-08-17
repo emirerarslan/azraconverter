@@ -31,6 +31,11 @@ from PySide6.QtWidgets import (
 APP_NAME = "AZRA CONVERTER"
 APP_VERSION = "1.1.0"
 UPDATE_CONFIG_FILE = "update_config.json"
+DEFAULT_MANIFEST_URLS = [
+    "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
+    "https://api.github.com/repos/emirerarslan/azraconverter/releases/latest",
+    "https://raw.githubusercontent.com/emirerarslan/azraconverter/main/updates/version.json",
+]
 
 PDF_EXTENSIONS = {".pdf"}
 WORD_EXTENSIONS = {
@@ -71,6 +76,55 @@ def load_update_config():
         return json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def update_manifest_urls(config):
+    """Yapılandırılmış adresleri ve güvenli varsayılan yedekleri sırayla döndürür."""
+    urls = []
+    configured = config.get("manifest_urls", [])
+    if isinstance(configured, str):
+        configured = [configured]
+    if isinstance(configured, list):
+        urls.extend(clean_text(url) for url in configured)
+    legacy_url = clean_text(config.get("manifest_url"))
+    if legacy_url:
+        urls.append(legacy_url)
+    urls.extend(DEFAULT_MANIFEST_URLS)
+    return list(dict.fromkeys(url for url in urls if url))
+
+
+def normalise_update_manifest(payload, source_url):
+    """Özel version.json ve GitHub Releases API yanıtlarını tek biçime getirir."""
+    if clean_text(payload.get("tag_name")):
+        version = clean_text(payload.get("tag_name")).lstrip("vV")
+        assets = payload.get("assets") or []
+        installer = next(
+            (
+                asset for asset in assets
+                if clean_text(asset.get("name")).lower().endswith(".exe")
+                and "setup" in clean_text(asset.get("name")).lower()
+            ),
+            None,
+        )
+        download_url = clean_text((installer or {}).get("browser_download_url"))
+        digest = clean_text((installer or {}).get("digest"))
+        sha256 = digest.split(":", 1)[1] if digest.lower().startswith("sha256:") else ""
+        return {
+            "version": version,
+            "download_url": download_url,
+            "sha256": sha256,
+            "notes": clean_text(payload.get("body"))[:300],
+        }
+
+    download_url = clean_text(payload.get("download_url"))
+    if download_url:
+        download_url = urljoin(source_url, download_url)
+    return {
+        "version": clean_text(payload.get("version")),
+        "download_url": download_url,
+        "sha256": clean_text(payload.get("sha256")),
+        "notes": clean_text(payload.get("notes")),
+    }
 
 
 
@@ -1162,37 +1216,47 @@ class UpdateWorker(QObject):
 
     def run(self):
         config = load_update_config()
-        manifest_url = clean_text(config.get("manifest_url"))
+        manifest = None
+        errors = []
+        for manifest_url in update_manifest_urls(config):
+            try:
+                request = Request(
+                    manifest_url,
+                    headers={
+                        "User-Agent": f"AzraConverter-Updater/{APP_VERSION}",
+                        "Accept": "application/vnd.github+json, application/json",
+                        "Cache-Control": "no-cache",
+                    },
+                )
+                with urlopen(request, timeout=12) as response:
+                    payload = json.loads(response.read().decode("utf-8-sig"))
+                candidate = normalise_update_manifest(payload, manifest_url)
+                if candidate["version"]:
+                    manifest = candidate
+                    break
+                errors.append(f"{urlsplit(manifest_url).netloc}: sürüm bilgisi yok")
+            except (OSError, URLError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                errors.append(f"{urlsplit(manifest_url).netloc}: {exc}")
 
-        if not manifest_url:
+        if manifest is None:
+            detail = "; ".join(errors[:3])
             self.error.emit(
-                "Güncelleme adresi tanımlı değil. Uygulamanın yanındaki "
-                "update_config.json dosyasına sunucu adresini ekleyin."
+                "Güncelleme servislerine ulaşılamadı. İnternet bağlantısını kontrol "
+                f"edip tekrar deneyin.{f' Ayrıntı: {detail}' if detail else ''}"
             )
             return
 
-        try:
-            with urlopen(manifest_url, timeout=6) as response:
-                manifest = json.loads(response.read().decode("utf-8"))
-        except (OSError, URLError, json.JSONDecodeError) as exc:
-            self.error.emit(f"Güncelleme sunucusuna ulaşılamadı: {exc}")
-            return
-
-        latest = clean_text(manifest.get("version"))
+        latest = manifest["version"]
         if not latest:
             self.error.emit("Güncelleme bilgisinde sürüm numarası bulunamadı.")
             return
 
-        download_url = clean_text(manifest.get("download_url"))
-        if download_url:
-            download_url = urljoin(manifest_url, download_url)
-
         self.finished.emit({
             "version": latest,
             "is_new": version_key(latest) > version_key(APP_VERSION),
-            "download_url": download_url,
-            "sha256": clean_text(manifest.get("sha256")),
-            "notes": clean_text(manifest.get("notes")),
+            "download_url": manifest["download_url"],
+            "sha256": manifest["sha256"],
+            "notes": manifest["notes"],
         })
 
 

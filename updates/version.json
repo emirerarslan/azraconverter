@@ -1,6 +1,6 @@
 {
-  "version": "1.0.3",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.0.3.exe",
-  "sha256": "e3aae40490d20c2403102f3e5e50127a9477997b4abc5831f47658a5e17e42eb",
-  "notes": "Uygulama içi güncelleme indirmesi doğrulanarak daha güvenli hâle getirildi."
+  "version": "1.1.0",
+  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.0.exe",
+  "sha256": "",
+  "notes": "Altı yönlü PDF, Word ve Excel dönüşümü; geniş dosya biçimi desteği ve 429 hatasına dayanıklı güncelleme sistemi."
 }

@@ -1,3 +1,7 @@
 {
-  "manifest_url": "https://raw.githubusercontent.com/emirerarslan/azraconverter/main/updates/version.json"
+  "manifest_urls": [
+    "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
+    "https://api.github.com/repos/emirerarslan/azraconverter/releases/latest",
+    "https://raw.githubusercontent.com/emirerarslan/azraconverter/main/updates/version.json"
+  ]
 }

@@ -58,6 +58,50 @@ class Progress:
 
 
 class ConversionTests(unittest.TestCase):
+    def test_custom_update_manifest_is_normalised(self):
+        manifest = main.normalise_update_manifest(
+            {
+                "version": "1.2.0",
+                "download_url": "AZRA-SETUP.exe",
+                "sha256": "abc123",
+                "notes": "Test sürümü",
+            },
+            "https://example.com/updates/version.json",
+        )
+        self.assertEqual(manifest["version"], "1.2.0")
+        self.assertEqual(
+            manifest["download_url"],
+            "https://example.com/updates/AZRA-SETUP.exe",
+        )
+        self.assertEqual(manifest["sha256"], "abc123")
+
+    def test_github_release_api_manifest_is_normalised(self):
+        manifest = main.normalise_update_manifest(
+            {
+                "tag_name": "v1.1.0",
+                "body": "Yeni sürüm",
+                "assets": [
+                    {
+                        "name": "AZRA-CONVERTER-SETUP-1.1.0.exe",
+                        "browser_download_url": "https://example.com/setup.exe",
+                        "digest": "sha256:abcdef",
+                    }
+                ],
+            },
+            "https://api.github.com/repos/example/app/releases/latest",
+        )
+        self.assertEqual(manifest["version"], "1.1.0")
+        self.assertEqual(manifest["download_url"], "https://example.com/setup.exe")
+        self.assertEqual(manifest["sha256"], "abcdef")
+
+    def test_update_urls_keep_fallbacks_without_duplicates(self):
+        urls = main.update_manifest_urls({
+            "manifest_urls": [main.DEFAULT_MANIFEST_URLS[0]],
+            "manifest_url": main.DEFAULT_MANIFEST_URLS[2],
+        })
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertIn("api.github.com", " ".join(urls))
+
     def test_extension_catalog_covers_legacy_and_open_formats(self):
         expected = {
             ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".txt",

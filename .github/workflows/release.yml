@@ -1,0 +1,97 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build dependencies
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+          choco install tesseract innosetup --yes --no-progress
+
+      - name: Run conversion tests
+        shell: powershell
+        run: python -m unittest discover -s tests -v
+
+      - name: Build application
+        shell: powershell
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed `
+            --name "AZRA CONVERTER" `
+            --icon "azra_gold.ico" `
+            --add-data "azra_gold.ico;." `
+            --add-data "azra_gold_logo_real_transparent.png;." `
+            --add-data "C:\Program Files\Tesseract-OCR;tesseract" `
+            main.py
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $scriptPath = "setup_azra_premium_v2_fixed_1.0.2.iss"
+          $script = Get-Content -Raw -LiteralPath $scriptPath
+          $script = $script -replace '#define MyAppVersion "[^"]+"', "#define MyAppVersion `"$version`""
+          $script = $script -replace 'OutputBaseFilename=AZRA-CONVERTER-SETUP-[^\r\n]+', "OutputBaseFilename=AZRA-CONVERTER-SETUP-$version"
+          Set-Content -LiteralPath $scriptPath -Value $script -Encoding utf8
+
+          $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+          & $iscc $scriptPath
+
+      - name: Create release manifest
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $installer = "installer/AZRA-CONVERTER-SETUP-$version.exe"
+          if (-not (Test-Path -LiteralPath $installer)) {
+            throw "Installer was not produced: $installer"
+          }
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $manifest = [ordered]@{
+            version = $version
+            download_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-$version.exe"
+            sha256 = $sha256
+            notes = "Altı yönlü PDF, Word ve Excel dönüşümü; geniş dosya biçimi desteği ve dayanıklı güncelleme sistemi."
+          }
+          $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
+          Set-Content -LiteralPath release/installer.sha256 -Value "$sha256  AZRA-CONVERTER-SETUP-$version.exe" -Encoding ascii
+
+      - name: Publish GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          gh release create $env:GITHUB_REF_NAME `
+            "installer/AZRA-CONVERTER-SETUP-$version.exe" `
+            "release/version.json" `
+            "release/installer.sha256" `
+            --title "Azra Converter $version" `
+            --notes "Altı yönlü PDF, Word ve Excel dönüşümü, geniş biçim desteği ve 429 hatasına dayanıklı güncelleme sistemi."
