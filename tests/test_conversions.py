@@ -117,7 +117,7 @@ class ConversionTests(unittest.TestCase):
                 archive.writestr("AZRA CONVERTER.exe", b"binary")
                 archive.writestr("_internal/library.dll", b"library")
             app_folder = main.extract_update_package(package, folder / "staging")
-            self.assertEqual(app_folder, folder / "staging")
+            self.assertEqual(app_folder, (folder / "staging").resolve())
             self.assertTrue((app_folder / "_internal" / "library.dll").exists())
 
     def test_update_package_rejects_path_traversal(self):
