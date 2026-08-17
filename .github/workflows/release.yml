@@ -134,8 +134,9 @@ jobs:
           $notes = "Desteklenmeyen dekoratif simgeler kaldırıldı, kurulum metinleri güvenli karakterlerle güncellendi ve dağıtıma hazır RAR paketi eklendi."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
-            gh release view $env:GITHUB_REF_NAME *> $null
-            if ($LASTEXITCODE -eq 0) {
+            cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"
+            $releaseExists = $LASTEXITCODE -eq 0
+            if ($releaseExists) {
               gh release upload $env:GITHUB_REF_NAME $files --clobber
               if ($LASTEXITCODE -eq 0) {
                 gh release edit $env:GITHUB_REF_NAME --title "Azra Converter $version" --notes $notes
