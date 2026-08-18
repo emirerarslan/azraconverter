@@ -64,6 +64,7 @@ echo PREMIUM EXE klasoru olusturuluyor...
  --icon "azra_gold.ico" ^
  --add-data "azra_gold.ico;." ^
  --add-data "azra_gold_logo_real_transparent.png;." ^
+ --add-data "update_config.json;." ^
  --add-data "%TESS_DIR%;tesseract" ^
  main.py
 

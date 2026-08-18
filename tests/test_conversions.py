@@ -144,6 +144,16 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(len(urls), len(set(urls)))
         self.assertIn("api.github.com", " ".join(urls))
 
+    def test_update_result_is_consumed_once(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(
+            main, "update_result_path", return_value=Path(folder) / "result.json"
+        ):
+            main.write_update_result("success", "1.1.5")
+            self.assertEqual(main.consume_update_result(), {
+                "status": "success", "version": "1.1.5", "message": "",
+            })
+            self.assertEqual(main.consume_update_result(), {})
+
     def test_extension_catalog_covers_legacy_and_open_formats(self):
         expected = {
             ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".txt",

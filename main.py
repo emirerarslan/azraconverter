@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.4"
+APP_VERSION = "1.1.5"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -264,6 +264,32 @@ def unique_output(path):
 def _ps_quote(value):
     """Bir yolu PowerShell tek tırnaklı sabitinde güvenli hale getirir."""
     return str(Path(value).resolve()).replace("'", "''")
+
+
+def update_result_path():
+    """Güncelleme yardımcısının sonraki açılışa bıraktığı sonucu döndürür."""
+    local_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    return local_data / "Azra Converter" / "update-result.json"
+
+
+def write_update_result(status, version, message=""):
+    """Yönetici olarak çalışan yardımcı ile arayüz arasında kalıcı durum kaydı."""
+    path = update_result_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"status": status, "version": version, "message": message}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def consume_update_result():
+    path = update_result_path()
+    try:
+        result = json.loads(path.read_text(encoding="utf-8-sig"))
+        path.unlink(missing_ok=True)
+        return result if isinstance(result, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def _run_powershell_automation(script, failure_message):
@@ -2037,6 +2063,21 @@ class MainWindow(QMainWindow):
         root.addWidget(content_scroll, 1)
 
         self.update_buttons()
+        QTimer.singleShot(250, self._show_pending_update_result)
+
+    def _show_pending_update_result(self):
+        result = consume_update_result()
+        if result.get("status") == "success":
+            version = clean_text(result.get("version")) or APP_VERSION
+            QMessageBox.information(self, "Güncelleme tamamlandı", f"Azra Converter v{version} başarıyla yüklendi.")
+        elif result.get("status") == "failed":
+            detail = clean_text(result.get("message")) or "Bilinmeyen hata"
+            QMessageBox.warning(
+                self,
+                "Güncelleme tamamlanamadı",
+                "Güncelleme indirildi ancak dosyalar değiştirilemedi. "
+                "Lütfen uygulamayı kapatıp güncellemeyi tekrar deneyin.\n\nAyrıntı: " + detail,
+            )
 
     def _select_nav(self, active):
         for button in [self.nav_converter, self.nav_history,
@@ -2286,7 +2327,7 @@ class MainWindow(QMainWindow):
             self.update_download_error(str(exc))
 
     def update_download_error(self, message):
-        self.update_status.setText(f"Güncelleme indirilemedi: {message}")
+        self.update_status.setText(f"Güncelleme uygulanamadı: {message}")
         self.update_button.setText("YENİ SÜRÜMÜ YÜKLE")
         self.update_button.setEnabled(True)
 
@@ -2318,20 +2359,27 @@ class MainWindow(QMainWindow):
         current_executable = Path(sys.executable).resolve()
         install_dir = current_executable.parent
         helper = update_root / "apply_update.ps1"
+        write_update_result("pending", self._update_version)
+        result_path = update_result_path()
         helper.write_text(
             "$ErrorActionPreference = 'Stop'\r\n"
-            f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\r\n"
-            f"$source = '{_ps_quote(staged_app)}'\r\n"
-            f"$target = '{_ps_quote(install_dir)}'\r\n"
-            f"$exe = '{_ps_quote(current_executable)}'\r\n"
-            "$arguments = @($source, $target, '/E', '/COPY:DAT', '/R:5', '/W:1', "
-            "'/NFL', '/NDL', '/NJH', '/NJS', '/NP')\r\n"
-            "$copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList $arguments "
-            "-Wait -PassThru -WindowStyle Hidden\r\n"
-            "if ($copy.ExitCode -gt 7) { throw \"Güncelleme dosyaları kopyalanamadı: $($copy.ExitCode)\" }\r\n"
-            "Start-Process -FilePath $exe\r\n"
-            f"Remove-Item -LiteralPath '{_ps_quote(Path(package_path))}' -Force -ErrorAction SilentlyContinue\r\n"
-            "Remove-Item -LiteralPath $source -Recurse -Force -ErrorAction SilentlyContinue\r\n"
+            f"$resultPath = '{_ps_quote(result_path)}'\r\n"
+            f"$version = '{_ps_quote(self._update_version)}'\r\n"
+            "try {\r\n"
+            f"  Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\r\n"
+            f"  $source = '{_ps_quote(staged_app)}'\r\n"
+            f"  $target = '{_ps_quote(install_dir)}'\r\n"
+            f"  $exe = '{_ps_quote(current_executable)}'\r\n"
+            "  $arguments = @($source, $target, '/E', '/COPY:DAT', '/R:5', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')\r\n"
+            "  $copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden\r\n"
+            "  if ($copy.ExitCode -gt 7) { throw \"Dosyalar kopyalanamadı (robocopy: $($copy.ExitCode)).\" }\r\n"
+            "  @{status='success'; version=$version; message=''} | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8\r\n"
+            "  Start-Process -FilePath $exe\r\n"
+            f"  Remove-Item -LiteralPath '{_ps_quote(Path(package_path))}' -Force -ErrorAction SilentlyContinue\r\n"
+            "  Remove-Item -LiteralPath $source -Recurse -Force -ErrorAction SilentlyContinue\r\n"
+            "} catch {\r\n"
+            "  @{status='failed'; version=$version; message=$_.Exception.Message} | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8\r\n"
+            "}\r\n"
             "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n",
             encoding="utf-8-sig",
         )

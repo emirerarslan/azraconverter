@@ -34,7 +34,9 @@ jobs:
         shell: powershell
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
-          $source = Get-Content -Raw -LiteralPath "main.py"
+          # Windows PowerShell otherwise reads BOM'suz UTF-8 dosyaları eski sistem
+          # kod sayfasıyla açar ve Türkçe arayüz metinlerini bozar.
+          $source = Get-Content -Raw -Encoding utf8 -LiteralPath "main.py"
           $source = $source -replace 'APP_VERSION = "[^"]+"', "APP_VERSION = `"$version`""
           Set-Content -LiteralPath "main.py" -Value $source -Encoding utf8
 
@@ -69,7 +71,7 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           $scriptPath = "setup_azra_premium_v2_fixed_1.0.2.iss"
-          $script = Get-Content -Raw -LiteralPath $scriptPath
+          $script = Get-Content -Raw -Encoding utf8 -LiteralPath $scriptPath
           $script = $script -replace '#define MyAppVersion "[^"]+"', "#define MyAppVersion `"$version`""
           $script = $script -replace 'OutputBaseFilename=AZRA-CONVERTER-SETUP-[^\r\n]+', "OutputBaseFilename=AZRA-CONVERTER-SETUP-$version"
           Set-Content -LiteralPath $scriptPath -Value $script -Encoding utf8
@@ -131,6 +133,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           $files = @(
             "installer/AZRA-CONVERTER-SETUP-$version.exe",
