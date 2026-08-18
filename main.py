@@ -23,7 +23,7 @@ OCR_AVAILABLE = None
 _PDF_FONTS = None
 
 from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings
-from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath
+from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QFrame,
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.10"
+APP_VERSION = "1.1.11"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1459,6 +1459,10 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("dropZone")
+        self._glow_phase = 0.0
+        self._border_timer = QTimer(self)
+        self._border_timer.timeout.connect(self._advance_border_glow)
+        self._border_timer.start(42)
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
@@ -1481,6 +1485,38 @@ class DropZone(QFrame):
         layout.addWidget(self.icon)
         layout.addWidget(self.title)
         layout.addWidget(self.sub)
+
+    def _advance_border_glow(self):
+        """Altın şerit ışığını çerçevenin etrafında kesintisiz ilerletir."""
+        self._glow_phase = (self._glow_phase + 1.35) % 72
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        # Stil sayfasının ince çerçevesinin üzerine iki katmanlı, hareketli bir
+        # LED şeridi çizilir. Kesiklerin kayması, ışığın çerçeveyi dolaştığı
+        # izlenimini verir; parlak katman ise altın yıldız parıltısı oluşturur.
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = self.rect().adjusted(3, 3, -3, -3)
+
+        halo = QPen(QColor(214, 177, 107, 50), 5)
+        halo.setStyle(Qt.DashLine)
+        halo.setDashPattern([1.2, 11.0])
+        halo.setDashOffset(-self._glow_phase)
+        halo.setCapStyle(Qt.RoundCap)
+        painter.setPen(halo)
+        painter.drawRoundedRect(rect, 14, 14)
+
+        lights = QPen(QColor(235, 196, 111, 225), 1.7)
+        lights.setStyle(Qt.DashLine)
+        lights.setDashPattern([1.0, 12.5])
+        lights.setDashOffset(-self._glow_phase)
+        lights.setCapStyle(Qt.RoundCap)
+        painter.setPen(lights)
+        painter.drawRoundedRect(rect, 14, 14)
+        painter.end()
 
     def show_file(self, path):
         path = Path(path)

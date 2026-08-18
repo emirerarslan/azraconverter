@@ -28,7 +28,7 @@ def _install_pyside_stubs():
     core.QObject = _DummyWidget
     core.Signal = lambda *_args, **_kwargs: _DummySignal()
     core.QThread = core.QTimer = core.QSettings = _DummyWidget
-    for name in ("QFont", "QIcon", "QPixmap", "QPainter", "QPainterPath"):
+    for name in ("QFont", "QIcon", "QPixmap", "QPainter", "QPainterPath", "QColor", "QPen"):
         setattr(gui, name, _DummyWidget)
     for name in (
         "QApplication", "QMainWindow", "QWidget", "QVBoxLayout", "QHBoxLayout",
