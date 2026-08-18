@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.6"
+APP_VERSION = "1.1.7"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1930,10 +1930,6 @@ class MainWindow(QMainWindow):
             logo.setPixmap(logo_pix)
         side.addWidget(logo)
 
-        brand = QLabel("AZRA GOLD")
-        brand.setObjectName("logoText")
-        brand.setAlignment(Qt.AlignCenter)
-        side.addWidget(brand)
         side.addSpacing(24)
 
         self.nav_converter = NavButton("  Dönüştürücü")
