@@ -115,8 +115,10 @@ jobs:
             version = $version
             download_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-$version.exe"
             sha256 = $sha256
-            package_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-UPDATE-$version.zip"
-            package_sha256 = $packageSha256
+            # Existing clients use the installer for the transition away from
+            # robocopy-based in-place updates. The ZIP remains a release asset.
+            package_url = ""
+            package_sha256 = ""
             distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
             # Keep release metadata ASCII-only: Windows PowerShell can otherwise

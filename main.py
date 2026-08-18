@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.7"
+APP_VERSION = "1.1.8"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -2251,18 +2251,21 @@ class MainWindow(QMainWindow):
         latest = result["version"]
         package_url = result.get("package_url", "")
         installer_url = result.get("download_url", "")
-        if result["is_new"] and (package_url or installer_url):
-            self._update_kind = "package" if package_url else "installer"
-            self._update_download_url = package_url or installer_url
+        if result["is_new"] and (installer_url or package_url):
+            # Inno Setup updates the installed folder transactionally and handles
+            # elevation itself. This is more reliable than replacing a live
+            # PyInstaller directory with robocopy.
+            self._update_kind = "installer" if installer_url else "package"
+            self._update_download_url = installer_url or package_url
             self._update_version = latest
             self._update_checksum = (
-                result.get("package_sha256", "")
-                if package_url else result.get("sha256", "")
+                result.get("sha256", "")
+                if installer_url else result.get("package_sha256", "")
             )
             note = f" - {result['notes']}" if result["notes"] else ""
             self.update_status.setText(f"Yeni sürüm hazır: v{latest}{note}")
             self.update_button.setText(
-                "PROGRAM İÇİNDE GÜNCELLE" if package_url else "YENİ SÜRÜMÜ YÜKLE"
+                "YENİ SÜRÜMÜ YÜKLE"
             )
             self.update_button.setEnabled(True)
             try:
