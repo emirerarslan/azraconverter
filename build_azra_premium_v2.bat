@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 
 echo ============================================
@@ -8,6 +9,15 @@ echo ============================================
 echo.
 
 set "TESS_DIR=C:\Program Files\Tesseract-OCR"
+
+rem Always build with Python 3.  This prevents a system Python association
+rem from interpreting UTF-8 source files with a legacy code page.
+where py >nul 2>nul
+if errorlevel 1 (
+    set "PYTHON_CMD=python"
+) else (
+    set "PYTHON_CMD=py -3"
+)
 
 if not exist "main.py" (
     echo HATA: main.py bulunamadi.
@@ -34,7 +44,7 @@ if not exist "%TESS_DIR%\tesseract.exe" (
     exit /b 1
 )
 
-python -m pip install --upgrade pyinstaller
+%PYTHON_CMD% -m pip install --upgrade pyinstaller
 if errorlevel 1 (
     echo HATA: PyInstaller kurulumu basarisiz.
     pause
@@ -49,7 +59,7 @@ if exist "AZRA CONVERTER.spec" del /q "AZRA CONVERTER.spec"
 
 echo.
 echo PREMIUM EXE klasoru olusturuluyor...
-python -m PyInstaller --noconfirm --clean --onedir --windowed ^
+%PYTHON_CMD% -m PyInstaller --noconfirm --clean --onedir --windowed ^
  --name "AZRA CONVERTER" ^
  --icon "azra_gold.ico" ^
  --add-data "azra_gold.ico;." ^

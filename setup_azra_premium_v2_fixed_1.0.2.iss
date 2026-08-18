@@ -1,9 +1,10 @@
+#pragma codepage "utf-8"
 ; ============================================================
 ; AZRA CONVERTER - PREMIUM DARK / GOLD SETUP
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.1.3"
+#define MyAppVersion "1.1.4"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
 #define MyAppIcon "azra_gold.ico"
@@ -18,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.3
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.4
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern

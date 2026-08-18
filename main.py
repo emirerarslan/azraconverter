@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import sys
 import os
 import json
@@ -31,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.1.4"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1630,6 +1632,13 @@ class ConversionCard(QFrame):
         self.button.setMinimumHeight(34)
         layout.addWidget(self.button)
 
+    def set_available(self, available):
+        """Kartı, seçilen kaynak dosya türü için kullanılabilir yapar."""
+        self.setEnabled(available)
+        self.setCursor(
+            Qt.PointingHandCursor if available else Qt.ArrowCursor
+        )
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1787,6 +1796,19 @@ class MainWindow(QMainWindow):
             QFrame#conversionCard:hover {
                 border: 1px solid #80683E;
                 background: #171614;
+            }
+            QFrame#conversionCard:disabled {
+                background: #101010;
+                border-color: #201F1D;
+            }
+            QFrame#conversionCard:disabled QLabel#cardIcon {
+                color: #615846;
+            }
+            QFrame#conversionCard:disabled QLabel#cardTitle {
+                color: #68645D;
+            }
+            QFrame#conversionCard:disabled QLabel#cardSubtitle {
+                color: #4D4A45;
             }
             QLabel#cardIcon {
                 color: #D6B16B;
@@ -1971,6 +1993,14 @@ class MainWindow(QMainWindow):
         self.word_pdf_card = ConversionCard("WORD  ->  PDF", "Belgeyi PDF olarak dışa aktar")
         self.word_excel_card = ConversionCard("WORD  ->  EXCEL", "Metin + tabloları sayfalara aktar")
         self.excel_word_card = ConversionCard("EXCEL  ->  WORD", "Tüm çalışma sayfalarını aktar")
+        self._conversion_cards = {
+            "pdf_excel": self.pdf_excel_card,
+            "pdf_word": self.pdf_word_card,
+            "excel_pdf": self.excel_pdf_card,
+            "excel_word": self.excel_word_card,
+            "word_pdf": self.word_pdf_card,
+            "word_excel": self.word_excel_card,
+        }
 
         cards.addWidget(self.pdf_excel_card, 0, 0)
         cards.addWidget(self.pdf_word_card, 0, 1)
@@ -2442,12 +2472,13 @@ class MainWindow(QMainWindow):
 
     def update_buttons(self):
         ext = Path(self.source_file).suffix.lower() if self.source_file else ""
-        self.pdf_excel_card.button.setEnabled(ext in PDF_EXTENSIONS)
-        self.pdf_word_card.button.setEnabled(ext in PDF_EXTENSIONS)
-        self.excel_pdf_card.button.setEnabled(ext in SPREADSHEET_EXTENSIONS)
-        self.excel_word_card.button.setEnabled(ext in SPREADSHEET_EXTENSIONS)
-        self.word_pdf_card.button.setEnabled(ext in WORD_EXTENSIONS)
-        self.word_excel_card.button.setEnabled(ext in WORD_EXTENSIONS)
+        allowed_modes = (
+            {"pdf_excel", "pdf_word"} if ext in PDF_EXTENSIONS else
+            {"excel_pdf", "excel_word"} if ext in SPREADSHEET_EXTENSIONS else
+            {"word_pdf", "word_excel"} if ext in WORD_EXTENSIONS else set()
+        )
+        for mode, card in self._conversion_cards.items():
+            card.set_available(mode in allowed_modes)
 
     def start_conversion(self, mode):
         if not self.source_file:
@@ -2472,10 +2503,8 @@ class MainWindow(QMainWindow):
         self.status.setText("Dönüştürülüyor...")
         self._active_mode = mode
 
-        for card in [self.pdf_excel_card, self.pdf_word_card,
-                     self.excel_pdf_card, self.word_pdf_card,
-                     self.word_excel_card, self.excel_word_card]:
-            card.button.setEnabled(False)
+        for card in self._conversion_cards.values():
+            card.set_available(False)
 
         self.thread = QThread()
         self.worker = ConverterWorker(mode, self.source_file)

@@ -117,7 +117,7 @@ jobs:
             package_sha256 = $packageSha256
             distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
-            notes = "Tamamlanma penceresi koyu-altın temaya alındı; dosya görünümü büyütüldü ve önde açılan iptal edilebilir ilerleme penceresi eklendi."
+            notes = "Türkçe karakter kodlaması düzeltildi; yalnızca seçilen dosya türüne uygun dönüşüm seçenekleri etkinleştirildi."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
@@ -139,7 +139,7 @@ jobs:
             "release/version.json",
             "release/checksums.sha256"
           )
-          $notes = "Koyu-altın tamamlanma penceresi, büyük seçili dosya görünümü, otomatik sürüm etiketi ve iptal edilebilir önde ilerleme penceresi eklendi."
+          $notes = "Türkçe karakter kodlaması düzeltildi ve dosya türüne uygun dönüşüm seçenekleri etkinleştirildi."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
             cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"
