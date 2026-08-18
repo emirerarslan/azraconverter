@@ -119,7 +119,9 @@ jobs:
             package_sha256 = $packageSha256
             distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
-            notes = "Türkçe karakter kodlaması düzeltildi; yalnızca seçilen dosya türüne uygun dönüşüm seçenekleri etkinleştirildi."
+            # Keep release metadata ASCII-only: Windows PowerShell can otherwise
+            # pass non-ASCII CLI arguments through the active console code page.
+            notes = "UTF-8 text encoding and update reporting improved."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
@@ -142,7 +144,7 @@ jobs:
             "release/version.json",
             "release/checksums.sha256"
           )
-          $notes = "Türkçe karakter kodlaması düzeltildi ve dosya türüne uygun dönüşüm seçenekleri etkinleştirildi."
+          $notes = "UTF-8 text encoding and update reporting improved."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
             cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"

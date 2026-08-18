@@ -148,9 +148,9 @@ class ConversionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(
             main, "update_result_path", return_value=Path(folder) / "result.json"
         ):
-            main.write_update_result("success", "1.1.5")
+            main.write_update_result("success", "1.1.6")
             self.assertEqual(main.consume_update_result(), {
-                "status": "success", "version": "1.1.5", "message": "",
+                "status": "success", "version": "1.1.6", "message": "",
             })
             self.assertEqual(main.consume_update_result(), {})
 
