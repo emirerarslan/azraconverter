@@ -35,6 +35,7 @@ def _install_pyside_stubs():
         "QGridLayout", "QLabel", "QPushButton", "QFileDialog", "QMessageBox",
         "QFrame", "QProgressBar", "QSizePolicy", "QSpacerItem", "QDialog",
         "QScrollArea", "QTableWidget", "QTableWidgetItem",
+        "QComboBox", "QCheckBox",
     ):
         setattr(widgets, name, _DummyWidget)
     sys.modules.update({

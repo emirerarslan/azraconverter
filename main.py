@@ -28,12 +28,12 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QFrame,
     QProgressBar, QSizePolicy, QSpacerItem, QDialog, QScrollArea,
-    QTableWidget, QTableWidgetItem
+    QTableWidget, QTableWidgetItem, QComboBox, QCheckBox
 )
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.9"
+APP_VERSION = "1.1.10"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1819,6 +1819,81 @@ class MainWindow(QMainWindow):
             QPushButton#selectButton:hover {
                 background: #E2C27C;
             }
+            QFrame#conversionPanel {
+                background: #131313;
+                border: 1px solid #39342C;
+                border-radius: 14px;
+            }
+            QFrame#sourceDetails {
+                background: #181715;
+                border: 1px solid #292722;
+                border-radius: 10px;
+            }
+            QLabel#panelEyebrow {
+                color: #9C8558;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1px;
+            }
+            QLabel#sourceType {
+                color: #D6B16B;
+                font-size: 25px;
+                font-weight: 800;
+            }
+            QLabel#sourceName {
+                color: #F2E8D3;
+                font-size: 15px;
+                font-weight: 750;
+            }
+            QLabel#sourceMeta, QLabel#targetHint {
+                color: #817C73;
+                font-size: 11px;
+            }
+            QLabel#targetLabel {
+                color: #F0ECE4;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QComboBox#targetFormat {
+                background: #1A1917;
+                color: #F2E8D3;
+                border: 1px solid #655331;
+                border-radius: 8px;
+                padding: 8px 11px;
+                min-height: 22px;
+                font-weight: 650;
+            }
+            QComboBox#targetFormat::drop-down { border: none; width: 28px; }
+            QComboBox#targetFormat QAbstractItemView {
+                background: #1A1917;
+                color: #F2E8D3;
+                selection-background-color: #D6B16B;
+                selection-color: #11100E;
+            }
+            QCheckBox#outputOption {
+                color: #AAA49A;
+                font-size: 11px;
+                spacing: 8px;
+            }
+            QCheckBox#outputOption::indicator {
+                width: 15px; height: 15px;
+                border: 1px solid #655331;
+                border-radius: 4px;
+                background: #111110;
+            }
+            QCheckBox#outputOption::indicator:checked { background: #D6B16B; }
+            QPushButton#convertButton {
+                background: #D6B16B;
+                color: #11100E;
+                border: none;
+                border-radius: 9px;
+                min-height: 42px;
+                font-size: 12px;
+                font-weight: 850;
+                padding: 0 24px;
+            }
+            QPushButton#convertButton:hover { background: #E5C980; }
+            QPushButton#convertButton:disabled { background: #3C362B; color: #85795F; }
             QFrame#conversionCard {
                 background: #141414;
                 border: 1px solid #272522;
@@ -1993,57 +2068,77 @@ class MainWindow(QMainWindow):
         self.drop_zone.clicked.connect(self.choose_file)
         content_layout.addWidget(self.drop_zone)
 
-        file_bar = QFrame()
-        file_bar.setObjectName("fileBar")
-        file_layout = QHBoxLayout(file_bar)
-        file_layout.setContentsMargins(14, 8, 8, 8)
+        self.conversion_panel = QFrame()
+        self.conversion_panel.setObjectName("conversionPanel")
+        panel_layout = QHBoxLayout(self.conversion_panel)
+        panel_layout.setContentsMargins(18, 18, 18, 18)
+        panel_layout.setSpacing(22)
 
-        self.file_label = QLabel("Henüz dosya seçilmedi")
-        self.file_label.setObjectName("fileName")
-        file_layout.addWidget(self.file_label, 1)
+        source_panel = QFrame()
+        source_panel.setObjectName("sourceDetails")
+        source_panel.setMinimumWidth(255)
+        source_layout = QVBoxLayout(source_panel)
+        source_layout.setContentsMargins(16, 15, 16, 15)
+        source_layout.setSpacing(5)
 
-        select_btn = QPushButton("DOSYA SEÇ")
-        select_btn.setObjectName("selectButton")
-        select_btn.setFixedHeight(38)
-        select_btn.clicked.connect(self.choose_file)
-        file_layout.addWidget(select_btn)
+        source_eyebrow = QLabel("SEÇİLEN DOSYA")
+        source_eyebrow.setObjectName("panelEyebrow")
+        source_layout.addWidget(source_eyebrow)
 
-        content_layout.addWidget(file_bar)
+        self.source_type = QLabel()
+        self.source_type.setObjectName("sourceType")
+        source_layout.addWidget(self.source_type)
 
-        cards = QGridLayout()
-        cards.setHorizontalSpacing(10)
-        cards.setVerticalSpacing(10)
+        self.source_name = QLabel()
+        self.source_name.setObjectName("sourceName")
+        self.source_name.setWordWrap(True)
+        source_layout.addWidget(self.source_name)
 
-        self.pdf_excel_card = ConversionCard("PDF  ->  EXCEL", "OCR + akıllı tablo algılama")
-        self.pdf_word_card = ConversionCard("PDF  ->  WORD", "OCR + düzenlenebilir metin")
-        self.excel_pdf_card = ConversionCard("EXCEL  ->  PDF", "Sayfa düzenini koru")
-        self.word_pdf_card = ConversionCard("WORD  ->  PDF", "Belgeyi PDF olarak dışa aktar")
-        self.word_excel_card = ConversionCard("WORD  ->  EXCEL", "Metin + tabloları sayfalara aktar")
-        self.excel_word_card = ConversionCard("EXCEL  ->  WORD", "Tüm çalışma sayfalarını aktar")
-        self._conversion_cards = {
-            "pdf_excel": self.pdf_excel_card,
-            "pdf_word": self.pdf_word_card,
-            "excel_pdf": self.excel_pdf_card,
-            "excel_word": self.excel_word_card,
-            "word_pdf": self.word_pdf_card,
-            "word_excel": self.word_excel_card,
-        }
+        self.source_meta = QLabel()
+        self.source_meta.setObjectName("sourceMeta")
+        source_layout.addWidget(self.source_meta)
+        source_layout.addStretch(1)
 
-        cards.addWidget(self.pdf_excel_card, 0, 0)
-        cards.addWidget(self.pdf_word_card, 0, 1)
-        cards.addWidget(self.excel_pdf_card, 1, 0)
-        cards.addWidget(self.word_pdf_card, 1, 1)
-        cards.addWidget(self.word_excel_card, 2, 0)
-        cards.addWidget(self.excel_word_card, 2, 1)
+        change_file = QPushButton("DOSYAYI DEĞİŞTİR")
+        change_file.setObjectName("cardButton")
+        change_file.setMinimumHeight(32)
+        change_file.clicked.connect(self.choose_file)
+        source_layout.addWidget(change_file)
+        panel_layout.addWidget(source_panel, 1)
 
-        self.pdf_excel_card.button.clicked.connect(lambda: self.start_conversion("pdf_excel"))
-        self.pdf_word_card.button.clicked.connect(lambda: self.start_conversion("pdf_word"))
-        self.excel_pdf_card.button.clicked.connect(lambda: self.start_conversion("excel_pdf"))
-        self.word_pdf_card.button.clicked.connect(lambda: self.start_conversion("word_pdf"))
-        self.word_excel_card.button.clicked.connect(lambda: self.start_conversion("word_excel"))
-        self.excel_word_card.button.clicked.connect(lambda: self.start_conversion("excel_word"))
+        options = QVBoxLayout()
+        options.setSpacing(8)
+        target_eyebrow = QLabel("DÖNÜŞTÜRME AYARLARI")
+        target_eyebrow.setObjectName("panelEyebrow")
+        options.addWidget(target_eyebrow)
 
-        content_layout.addLayout(cards)
+        target_label = QLabel("Hedef biçim")
+        target_label.setObjectName("targetLabel")
+        options.addWidget(target_label)
+
+        self.target_format = QComboBox()
+        self.target_format.setObjectName("targetFormat")
+        self.target_format.currentIndexChanged.connect(self._target_format_changed)
+        options.addWidget(self.target_format)
+
+        self.target_hint = QLabel()
+        self.target_hint.setObjectName("targetHint")
+        self.target_hint.setWordWrap(True)
+        options.addWidget(self.target_hint)
+
+        self.open_output_checkbox = QCheckBox("İşlem bitince çıktı klasörünü otomatik aç")
+        self.open_output_checkbox.setObjectName("outputOption")
+        options.addWidget(self.open_output_checkbox)
+        options.addStretch(1)
+
+        self.convert_button = QPushButton("DÖNÜŞTÜRMEYİ BAŞLAT")
+        self.convert_button.setObjectName("convertButton")
+        self.convert_button.clicked.connect(self.start_conversion)
+        options.addWidget(self.convert_button)
+        panel_layout.addLayout(options, 2)
+
+        self.conversion_panel.setVisible(False)
+        content_layout.addWidget(self.conversion_panel)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -2053,7 +2148,9 @@ class MainWindow(QMainWindow):
 
         self.status = QLabel("Hazır")
         self.status.setObjectName("status")
+        self.status.setVisible(False)
         content_layout.addWidget(self.status)
+        content_layout.addStretch(1)
 
         content_scroll = QScrollArea()
         content_scroll.setObjectName("contentScroll")
@@ -2521,46 +2618,82 @@ class MainWindow(QMainWindow):
             return
 
         self.source_file = str(path)
-        self.file_label.setText(f"Seçilen: {path.name}")
         self.drop_zone.show_file(path)
-        self.status.setText("Dosya hazır. Bir dönüşüm seçin.")
+        self.status.setText("Dosya hazır. Hedef biçimi seçip dönüştürmeyi başlatın.")
+        self.status.setVisible(True)
         self.update_buttons()
 
-    def update_buttons(self):
+    def _conversion_options_for_file(self):
         ext = Path(self.source_file).suffix.lower() if self.source_file else ""
-        allowed_modes = (
-            {"pdf_excel", "pdf_word"} if ext in PDF_EXTENSIONS else
-            {"excel_pdf", "excel_word"} if ext in SPREADSHEET_EXTENSIONS else
-            {"word_pdf", "word_excel"} if ext in WORD_EXTENSIONS else set()
-        )
-        for mode, card in self._conversion_cards.items():
-            card.set_available(mode in allowed_modes)
+        if ext in PDF_EXTENSIONS:
+            return [
+                ("pdf_excel", "Excel belgesi (.xlsx)", "OCR ile tabloları çalışma sayfasına aktarır."),
+                ("pdf_word", "Word belgesi (.docx)", "OCR ile düzenlenebilir metin oluşturur."),
+            ]
+        if ext in SPREADSHEET_EXTENSIONS:
+            return [
+                ("excel_pdf", "PDF belgesi (.pdf)", "Çalışma sayfasını PDF olarak dışa aktarır."),
+                ("excel_word", "Word belgesi (.docx)", "Metin ve tabloları Word belgesine aktarır."),
+            ]
+        if ext in WORD_EXTENSIONS:
+            return [
+                ("word_pdf", "PDF belgesi (.pdf)", "Belge düzenini koruyarak PDF oluşturur."),
+                ("word_excel", "Excel belgesi (.xlsx)", "Metin ve tabloları çalışma sayfalarına aktarır."),
+            ]
+        return []
 
-    def start_conversion(self, mode):
+    def _target_format_changed(self):
+        option = self.target_format.currentData()
+        self.target_hint.setText(option[2] if option else "")
+
+    def update_buttons(self):
+        options = self._conversion_options_for_file()
+        self.conversion_panel.setVisible(bool(options))
+        self.convert_button.setEnabled(bool(options) and self.thread is None)
+        if not options:
+            return
+
+        selected_mode = self.target_format.currentData()
+        selected_mode = selected_mode[0] if selected_mode else ""
+        self.target_format.blockSignals(True)
+        self.target_format.clear()
+        for option in options:
+            self.target_format.addItem(option[1], option)
+        index = next((i for i, option in enumerate(options) if option[0] == selected_mode), 0)
+        self.target_format.setCurrentIndex(index)
+        self.target_format.blockSignals(False)
+        self._target_format_changed()
+
+        path = Path(self.source_file)
+        try:
+            size = path.stat().st_size
+            size_text = f"{size / (1024 * 1024):.1f} MB" if size >= 1024 * 1024 else f"{max(1, size // 1024)} KB"
+        except OSError:
+            size_text = "Boyut bilgisi yok"
+        self.source_type.setText(path.suffix.lstrip(".").upper() or "DOSYA")
+        self.source_name.setText(path.name)
+        self.source_meta.setText(f"{size_text}  •  Kaynak dosya")
+
+    def start_conversion(self):
         if not self.source_file:
             QMessageBox.information(self, "Dosya seçin", "Önce bir dosya seçin.")
             return
 
-        ext = Path(self.source_file).suffix.lower()
-        allowed_modes = (
-            {"pdf_excel", "pdf_word"} if ext in PDF_EXTENSIONS else
-            {"excel_pdf", "excel_word"} if ext in SPREADSHEET_EXTENSIONS else
-            {"word_pdf", "word_excel"} if ext in WORD_EXTENSIONS else set()
-        )
-        if mode not in allowed_modes:
+        option = self.target_format.currentData()
+        if not option:
             QMessageBox.warning(
                 self, "Geçersiz dönüşüm",
                 "Seçilen dosya bu dönüşüm türüyle uyumlu değil."
             )
             return
+        mode = option[0]
 
         self.progress.setVisible(False)
         self.progress.setValue(0)
         self.status.setText("Dönüştürülüyor...")
         self._active_mode = mode
 
-        for card in self._conversion_cards.values():
-            card.set_available(False)
+        self.convert_button.setEnabled(False)
 
         self.thread = QThread()
         self.worker = ConverterWorker(mode, self.source_file)
@@ -2641,7 +2774,7 @@ class MainWindow(QMainWindow):
         if self.source_file and self._active_mode:
             self._save_history(self._active_mode, self.source_file, output, True)
         self._active_mode = None
-        if self._ask_open_output_folder(output):
+        if self.open_output_checkbox.isChecked() or self._ask_open_output_folder(output):
             os.startfile(str(Path(output).parent))
 
     def conversion_error(self, details):
