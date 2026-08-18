@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 OCR_AVAILABLE = None
 _PDF_FONTS = None
 
-from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer
+from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.8"
+APP_VERSION = "1.1.9"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -1678,10 +1678,15 @@ class MainWindow(QMainWindow):
         self.current_page = "converter"
 
         self.setWindowTitle(APP_NAME)
-        # Pencere serbestçe yeniden boyutlandırılabilir. İçerik, dar veya
-        # kısa ekranlarda kaydırılabildiği için kartlar erişilemez kalmaz.
-        self.setMinimumSize(900, 620)
-        self.resize(1200, 780)
+        # İçerik kaydırılabildiğinden pencere daha küçük boyutlarda da
+        # kullanılabilir. Son kullanılan boyut ve konum sonraki açılışta korunur.
+        self.setMinimumSize(640, 480)
+        self._window_settings = QSettings("Azra Gold", "Azra Converter")
+        saved_geometry = self._window_settings.value("window_geometry")
+        if saved_geometry:
+            self.restoreGeometry(saved_geometry)
+        else:
+            self.resize(1200, 780)
 
         icon_path = resource_path("azra_gold.ico")
         if os.path.exists(icon_path):
@@ -2060,6 +2065,10 @@ class MainWindow(QMainWindow):
 
         self.update_buttons()
         QTimer.singleShot(250, self._show_pending_update_result)
+
+    def closeEvent(self, event):
+        self._window_settings.setValue("window_geometry", self.saveGeometry())
+        super().closeEvent(event)
 
     def _show_pending_update_result(self):
         result = consume_update_result()
