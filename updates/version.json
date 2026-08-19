@@ -1,8 +1,8 @@
 {
-  "version": "1.1.22",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.22.exe",
+  "version": "1.1.23",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.23.exe",
   "sha256": "",
   "package_url": "",
   "package_sha256": "",
-  "notes": "Güncelleme kurulurken bekleme penceresi ve durum bilgisi eklendi."
+  "notes": "Dönüştürme ilerlemesi akıcılaştırıldı ve iptal yanıtı hızlandırıldı."
 }

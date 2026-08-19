@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import traceback
 import zipfile
 from pathlib import Path
@@ -22,7 +23,10 @@ from urllib.request import Request, urlopen
 OCR_AVAILABLE = None
 _PDF_FONTS = None
 
-from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl, QSize
+from PySide6.QtCore import (
+    Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl, QSize,
+    QPropertyAnimation, QEasingCurve,
+)
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -41,7 +45,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.22"
+APP_VERSION = "1.1.23"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -411,23 +415,37 @@ def consume_update_result():
         return {}
 
 
-def _run_powershell_automation(script, failure_message):
+def _run_powershell_automation(script, failure_message, cancel_check=None):
     """Office COM otomasyonunu görünür pencere açmadan çalıştırır."""
     startupinfo = subprocess.STARTUPINFO()
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = subprocess.SW_HIDE
-    result = subprocess.run(
+    process = subprocess.Popen(
         [
             "powershell", "-NoProfile", "-NonInteractive",
             "-ExecutionPolicy", "Bypass", "-Command", script,
         ],
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         startupinfo=startupinfo,
-        check=False,
     )
-    if result.returncode != 0:
-        detail = clean_text(result.stderr) or clean_text(result.stdout)
+    while process.poll() is None:
+        if cancel_check is not None:
+            try:
+                cancel_check()
+            except ConversionCancelled:
+                process.terminate()
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                raise
+        time.sleep(0.12)
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        detail = clean_text(stderr) or clean_text(stdout)
         raise RuntimeError(
             failure_message + (f"\n\nAyrıntı: {detail}" if detail else "")
         )
@@ -469,7 +487,7 @@ def ensure_spreadsheet_dependency_compatibility():
             setattr(numpy, legacy_name, getattr(numpy, replacement_name))
 
 
-def libreoffice_convert(src, out, target_format):
+def libreoffice_convert(src, out, target_format, cancel_check=None):
     """LibreOffice ile güvenli bir geçici klasörde biçim dönüştürür."""
     soffice = find_libreoffice()
     if not soffice:
@@ -486,18 +504,32 @@ def libreoffice_convert(src, out, target_format):
     src = Path(src).resolve()
     out = Path(out).resolve()
     with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
-        result = subprocess.run(
+        process = subprocess.Popen(
             [
                 soffice, "--headless", "--nologo", "--nodefault", "--nolockcheck",
                 "--convert-to", filters[target_format], "--outdir", temp_dir, str(src),
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            check=False,
         )
+        while process.poll() is None:
+            if cancel_check is not None:
+                try:
+                    cancel_check()
+                except ConversionCancelled:
+                    process.terminate()
+                    try:
+                        process.communicate(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+                    raise
+            time.sleep(0.12)
+        stdout, stderr = process.communicate()
         candidates = list(Path(temp_dir).glob(f"*.{target_format}"))
-        if result.returncode != 0 or not candidates:
-            detail = clean_text(result.stderr) or clean_text(result.stdout)
+        if process.returncode != 0 or not candidates:
+            detail = clean_text(stderr) or clean_text(stdout)
             raise RuntimeError(
                 "LibreOffice dönüşümü tamamlayamadı."
                 + (f"\n\nAyrıntı: {detail}" if detail else "")
@@ -507,7 +539,7 @@ def libreoffice_convert(src, out, target_format):
     return out
 
 
-def word_to_docx_with_microsoft_word(src, out):
+def word_to_docx_with_microsoft_word(src, out, cancel_check=None):
     script = (
         "$ErrorActionPreference='Stop'; $word=$null; $document=$null; "
         "$word=New-Object -ComObject Word.Application; $word.Visible=$false; "
@@ -517,12 +549,14 @@ def word_to_docx_with_microsoft_word(src, out):
         "} finally { if ($document) {$document.Close($false)}; "
         "if ($word) {$word.Quit()} }"
     )
-    _run_powershell_automation(script, "Microsoft Word belgeyi DOCX biçimine çeviremedi.")
+    _run_powershell_automation(
+        script, "Microsoft Word belgeyi DOCX biçimine çeviremedi.", cancel_check
+    )
     if not Path(out).exists():
         raise RuntimeError("Microsoft Word DOCX çıktısını oluşturamadı.")
 
 
-def excel_to_xlsx_with_microsoft_excel(src, out):
+def excel_to_xlsx_with_microsoft_excel(src, out, cancel_check=None):
     script = (
         "$ErrorActionPreference='Stop'; $excel=$null; $book=$null; "
         "$excel=New-Object -ComObject Excel.Application; $excel.Visible=$false; "
@@ -532,21 +566,23 @@ def excel_to_xlsx_with_microsoft_excel(src, out):
         "} finally { if ($book) {$book.Close($false)}; "
         "if ($excel) {$excel.Quit()} }"
     )
-    _run_powershell_automation(script, "Microsoft Excel dosyayı XLSX biçimine çeviremedi.")
+    _run_powershell_automation(
+        script, "Microsoft Excel dosyayı XLSX biçimine çeviremedi.", cancel_check
+    )
     if not Path(out).exists():
         raise RuntimeError("Microsoft Excel XLSX çıktısını oluşturamadı.")
 
 
-def _normalise_word_document(src, temp_dir):
+def _normalise_word_document(src, temp_dir, cancel_check=None):
     src = Path(src)
     if src.suffix.lower() == ".docx":
         return src
     target = Path(temp_dir) / f"{src.stem}.docx"
     try:
-        word_to_docx_with_microsoft_word(src, target)
+        word_to_docx_with_microsoft_word(src, target, cancel_check)
     except Exception as word_error:
         try:
-            libreoffice_convert(src, target, "docx")
+            libreoffice_convert(src, target, "docx", cancel_check)
         except Exception as libreoffice_error:
             raise RuntimeError(
                 f"{src.suffix.upper()} belgesi açılamadı. Microsoft Word veya "
@@ -555,7 +591,7 @@ def _normalise_word_document(src, temp_dir):
     return target
 
 
-def _normalise_spreadsheet(src, temp_dir):
+def _normalise_spreadsheet(src, temp_dir, cancel_check=None):
     """Yaygın tablo biçimlerini kayıpsız işlem için XLSX'e normalleştirir."""
     ensure_spreadsheet_dependency_compatibility()
     from openpyxl import Workbook
@@ -594,10 +630,10 @@ def _normalise_spreadsheet(src, temp_dir):
         return target
 
     try:
-        excel_to_xlsx_with_microsoft_excel(src, target)
+        excel_to_xlsx_with_microsoft_excel(src, target, cancel_check)
     except Exception as excel_error:
         try:
-            libreoffice_convert(src, target, "xlsx")
+            libreoffice_convert(src, target, "xlsx", cancel_check)
         except Exception as libreoffice_error:
             raise RuntimeError(
                 f"{src.suffix.upper()} çalışma kitabı açılamadı. Microsoft Excel "
@@ -989,7 +1025,9 @@ def pdf_to_word(src, progress):
     # onu dener, başarısız olursa aşağıdaki OCR/tablo yoluna geçeriz.
     try:
         progress.emit(5)
-        word_to_docx_with_microsoft_word(src, out)
+        word_to_docx_with_microsoft_word(
+            src, out, getattr(progress, "check_cancelled", None)
+        )
         progress.emit(100)
         return out
     except Exception:
@@ -1116,7 +1154,7 @@ def make_pdf_styles():
     }
 
 
-def excel_to_pdf_with_microsoft_excel(src, out):
+def excel_to_pdf_with_microsoft_excel(src, out, cancel_check=None):
     """Excel'in baskı alanı, grafik ve sayfa ayarlarını koruyarak PDF üretir."""
     script = (
         "$ErrorActionPreference='Stop'; $excel=$null; $book=$null; "
@@ -1127,7 +1165,9 @@ def excel_to_pdf_with_microsoft_excel(src, out):
         "} finally { if ($book) {$book.Close($false)}; "
         "if ($excel) {$excel.Quit()} }"
     )
-    _run_powershell_automation(script, "Microsoft Excel PDF çıktısını oluşturamadı.")
+    _run_powershell_automation(
+        script, "Microsoft Excel PDF çıktısını oluşturamadı.", cancel_check
+    )
     if not Path(out).exists():
         raise RuntimeError("Microsoft Excel PDF çıktısını oluşturamadı.")
 
@@ -1145,7 +1185,9 @@ def excel_to_pdf(src, progress):
 
     progress.emit(5)
     try:
-        excel_to_pdf_with_microsoft_excel(src, out)
+        excel_to_pdf_with_microsoft_excel(
+            src, out, getattr(progress, "check_cancelled", None)
+        )
         progress.emit(100)
         return out
     except Exception:
@@ -1153,7 +1195,9 @@ def excel_to_pdf(src, progress):
             out.unlink()
 
     try:
-        libreoffice_convert(src, out, "pdf")
+        libreoffice_convert(
+            src, out, "pdf", getattr(progress, "check_cancelled", None)
+        )
         progress.emit(100)
         return out
     except Exception:
@@ -1236,7 +1280,7 @@ def excel_to_pdf(src, progress):
     return out
 
 
-def word_to_pdf_with_microsoft_word(src, out):
+def word_to_pdf_with_microsoft_word(src, out, cancel_check=None):
     """Word'ün kendi PDF dışa aktarmasıyla düzeni yüksek sadakatle korur."""
     script = (
         "$ErrorActionPreference='Stop'; $word=$null; $document=$null; "
@@ -1249,7 +1293,9 @@ def word_to_pdf_with_microsoft_word(src, out):
         "if ($document) {$document.Close($false)}; if ($word) {$word.Quit()} "
         "}"
     )
-    _run_powershell_automation(script, "Microsoft Word PDF çıktısını oluşturamadı.")
+    _run_powershell_automation(
+        script, "Microsoft Word PDF çıktısını oluşturamadı.", cancel_check
+    )
     if not Path(out).exists():
         raise RuntimeError("Microsoft Word PDF çıktısını oluşturamadı.")
 
@@ -1268,7 +1314,9 @@ def word_to_pdf(src, progress):
     # grafik ve sayfa sonlarını yerleşik metin tabanlı yoldan daha iyi korur.
     progress.emit(5)
     try:
-        word_to_pdf_with_microsoft_word(src, out)
+        word_to_pdf_with_microsoft_word(
+            src, out, getattr(progress, "check_cancelled", None)
+        )
         progress.emit(100)
         return out
     except Exception:
@@ -1276,7 +1324,9 @@ def word_to_pdf(src, progress):
             out.unlink()
 
     try:
-        libreoffice_convert(src, out, "pdf")
+        libreoffice_convert(
+            src, out, "pdf", getattr(progress, "check_cancelled", None)
+        )
         progress.emit(100)
         return out
     except Exception:
@@ -1382,7 +1432,9 @@ def word_to_excel(src, progress):
     src = Path(src)
     out = unique_output(src.with_name(src.stem + "_Excel.xlsx"))
     with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
-        normalised = _normalise_word_document(src, temp_dir)
+        normalised = _normalise_word_document(
+            src, temp_dir, getattr(progress, "check_cancelled", None)
+        )
         document = Document(str(normalised))
         workbook = Workbook()
         text_sheet = workbook.active
@@ -1439,7 +1491,9 @@ def excel_to_word(src, progress):
     src = Path(src)
     out = unique_output(src.with_name(src.stem + "_Word.docx"))
     with tempfile.TemporaryDirectory(prefix="AzraConverter-") as temp_dir:
-        normalised = _normalise_spreadsheet(src, temp_dir)
+        normalised = _normalise_spreadsheet(
+            src, temp_dir, getattr(progress, "check_cancelled", None)
+        )
         values_book = load_workbook(str(normalised), data_only=True, read_only=True)
         formulas_book = load_workbook(str(normalised), data_only=False, read_only=True)
         document = Document()
@@ -1614,6 +1668,9 @@ class CancellableProgress:
     def emit(self, value):
         self.worker.check_cancelled()
         self.worker.progress.emit(value)
+
+    def check_cancelled(self):
+        self.worker.check_cancelled()
 
 
 class ConverterWorker(QObject):
@@ -1829,6 +1886,8 @@ class ConversionProgressDialog(QDialog):
         super().__init__(parent)
         self._running = True
         self._cancel_requested = False
+        self._reported_progress = 0
+        self._idle_progress_ticks = 0
         self.setWindowTitle("Dönüştürülüyor")
         self.setModal(True)
         self.setWindowModality(Qt.ApplicationModal)
@@ -1876,6 +1935,17 @@ class ConversionProgressDialog(QDialog):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         layout.addWidget(self.progress)
+        self._progress_animation = QPropertyAnimation(self.progress, b"value", self)
+        self._progress_animation.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Bazı harici dönüştürücüler (Excel, Word, LibreOffice) yalnızca
+        # başlangıç ve bitiş yüzdesi verebilir. Kullanıcı %5'te takılı kalmış
+        # gibi görmesin diye gerçek bir sinyal gelmeyen sürelerde yavaş, üst
+        # sınırlı bir durum ilerlemesi gösterilir.
+        self._idle_progress_timer = QTimer(self)
+        self._idle_progress_timer.setInterval(250)
+        self._idle_progress_timer.timeout.connect(self._advance_idle_progress)
+        self._idle_progress_timer.start()
 
         self.hint = QLabel("Lütfen işlem tamamlanana kadar bekleyin.")
         self.hint.setObjectName("progressHint")
@@ -1887,7 +1957,36 @@ class ConversionProgressDialog(QDialog):
         layout.addWidget(self.cancel_button)
 
     def set_progress(self, value):
-        self.progress.setValue(value)
+        value = max(0, min(100, int(value)))
+        self._reported_progress = max(self._reported_progress, value)
+        self._idle_progress_ticks = 0
+        self._set_display_progress(max(self.progress.value(), value), 420)
+        if value >= 100:
+            self._idle_progress_timer.stop()
+
+    def _set_display_progress(self, value, duration):
+        value = max(0, min(100, int(value)))
+        current = self.progress.value()
+        if value <= current:
+            return
+        self._progress_animation.stop()
+        self._progress_animation.setDuration(duration)
+        self._progress_animation.setStartValue(current)
+        self._progress_animation.setEndValue(value)
+        self._progress_animation.start()
+
+    def _advance_idle_progress(self):
+        if not self._running or self._cancel_requested:
+            return
+        self._idle_progress_ticks += 1
+        # İlk kısa bekleme, gerçek ilk ilerleme sinyalinin görünmesine izin verir.
+        if self._idle_progress_ticks < 4 or self._idle_progress_ticks % 4:
+            return
+        current = self.progress.value()
+        if current >= 92:
+            return
+        self._set_display_progress(min(92, current + 1), 850)
+        self.hint.setText("İşlem sürüyor, lütfen bekleyin.")
 
     def request_cancel(self):
         if not self._running or self._cancel_requested:
@@ -1900,6 +1999,7 @@ class ConversionProgressDialog(QDialog):
 
     def finish(self):
         self._running = False
+        self._idle_progress_timer.stop()
         self.close()
 
     def closeEvent(self, event):
