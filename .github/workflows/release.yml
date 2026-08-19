@@ -106,13 +106,15 @@ jobs:
 
           $manifest = [ordered]@{
             version = $version
-            download_url = "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-$version.exe"
+            # The installer link is pinned to this tag. GitHub's `latest`
+            # redirect occasionally returns 404 on some Windows clients.
+            download_url = "https://github.com/emirerarslan/ConverteR/releases/download/v$version/CONVERTER-SETUP-$version.exe"
             sha256 = $sha256
             # Existing clients use the installer for the transition away from
             # robocopy-based in-place updates. The ZIP remains a release asset.
             package_url = ""
             package_sha256 = ""
-            distribution_url = "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-$version-DAGITIM.rar"
+            distribution_url = "https://github.com/emirerarslan/ConverteR/releases/download/v$version/CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
             # Keep release metadata ASCII-only: Windows PowerShell can otherwise
             # pass non-ASCII CLI arguments through the active console code page.
