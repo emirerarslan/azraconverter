@@ -25,14 +25,14 @@ if not exist "main.py" (
     exit /b 1
 )
 
-if not exist "azra_gold.ico" (
-    echo HATA: azra_gold.ico bulunamadi.
+if not exist "azra.ico" (
+    echo HATA: azra.ico bulunamadi.
     pause
     exit /b 1
 )
 
-if not exist "azra_gold_logo_real_transparent.png" (
-    echo HATA: azra_gold_logo_real_transparent.png bulunamadi.
+if not exist "azra-logo.png" (
+    echo HATA: azra-logo.png bulunamadi.
     pause
     exit /b 1
 )
@@ -61,9 +61,14 @@ echo.
 echo PREMIUM EXE klasoru olusturuluyor...
 %PYTHON_CMD% -m PyInstaller --noconfirm --clean --onedir --windowed ^
  --name "AZRA CONVERTER" ^
- --icon "azra_gold.ico" ^
- --add-data "azra_gold.ico;." ^
- --add-data "azra_gold_logo_real_transparent.png;." ^
+ --icon "azra.ico" ^
+ --add-data "azra.ico;." ^
+ --add-data "azra-logo.png;." ^
+ --add-data "rafine.ico;." ^
+ --add-data "rafine-logo.jpg;." ^
+ --add-data "emir-logo.jpg;." ^
+ --add-data "emir-video.mp4;." ^
+ --add-data "emir-yıldız.png;." ^
  --add-data "update_config.json;." ^
  --add-data "%TESS_DIR%;tesseract" ^
  main.py
@@ -79,7 +84,7 @@ echo.
 echo ============================================
 echo BASARILI!
 echo Program: dist\AZRA CONVERTER\AZRA CONVERTER.exe
-echo ICO:     dist\AZRA CONVERTER\azra_gold.ico
+echo ICO:     dist\AZRA CONVERTER\azra.ico
 echo ============================================
 echo.
 pause

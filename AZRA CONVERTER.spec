@@ -5,7 +5,17 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('azra_gold.ico', '.'), ('azra_gold_logo_real_transparent.png', '.'), ('C:/Program Files/Tesseract-OCR', 'tesseract')],
+    datas=[
+        ('azra.ico', '.'),
+        ('azra-logo.png', '.'),
+        ('rafine.ico', '.'),
+        ('rafine-logo.jpg', '.'),
+        ('emir-logo.jpg', '.'),
+        ('emir-video.mp4', '.'),
+        ('emir-yıldız.png', '.'),
+        ('update_config.json', '.'),
+        ('C:/Program Files/Tesseract-OCR', 'tesseract'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +42,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['azra_gold.ico'],
+    icon=['azra.ico'],
 )
 coll = COLLECT(
     exe,

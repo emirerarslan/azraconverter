@@ -22,18 +22,20 @@ from urllib.request import Request, urlopen
 OCR_AVAILABLE = None
 _PDF_FONTS = None
 
-from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings
+from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QFrame,
     QProgressBar, QSizePolicy, QSpacerItem, QDialog, QScrollArea,
-    QTableWidget, QTableWidgetItem, QComboBox, QCheckBox
+    QTableWidget, QTableWidgetItem, QComboBox, QCheckBox, QButtonGroup, QLayout
 )
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimediaWidgets import QVideoWidget
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.11"
+APP_VERSION = "1.1.12"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -53,6 +55,94 @@ SPREADSHEET_EXTENSIONS = {
 SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | WORD_EXTENSIONS | SPREADSHEET_EXTENSIONS
 
 
+# Tema varlıkları tek noktada tanımlanır. İlk eşleşen dosya kullanıldığı için
+# kaynak klasörü ve paketlenmiş uygulama aynı kurallarla çalışır.
+THEME_ASSET_CANDIDATES = {
+    "azra_logo": ("azra-logo.png", "azra_gold_logo_real_transparent.png"),
+    "azra_icon": ("azra.ico", "azra_gold.ico"),
+    "rafine_logo": ("rafine-logo.jpg", "rafine-logo.png"),
+    "rafine_icon": ("rafine.ico",),
+    "emir_photo": ("emir-foto.png", "emir-foto.jpg", "emir-logo.jpg"),
+    "emir_video": ("emir-video.mp4", "emir-video.mov", "emir-video.avi"),
+    "emir_star": ("emir-yıldız.png", "emir-yildiz.png", "emir-yıldız.jpg"),
+    "emir_icon": ("emir.ico",),
+}
+
+THEME_CONFIGS = {
+    "azra": {
+        "name": "Azra Mod",
+        "logo": "azra_logo",
+        "icon": "azra_icon",
+        "glow": QColor(235, 196, 111, 225),
+        "halo": QColor(214, 177, 107, 50),
+    },
+    "rafine": {
+        "name": "Rafine Mod",
+        "logo": "rafine_logo",
+        "icon": "rafine_icon",
+        "glow": QColor(47, 196, 176, 225),
+        "halo": QColor(47, 196, 176, 52),
+    },
+    "emir": {
+        "name": "Emir Mod",
+        "icon": "emir_icon",
+        "glow": QColor(210, 48, 62, 230),
+        "halo": QColor(210, 48, 62, 58),
+    },
+}
+
+THEME_STYLESHEETS = {
+    "azra": """
+        QMainWindow, QWidget#mainContent,
+        QScrollArea#contentScroll,
+        QScrollArea#contentScroll > QWidget > QWidget { background: #07110D; }
+        QFrame#sidebar { background: #0C1712; border-right-color: #3F3521; }
+        QLabel#pageTitle { color: #F7EBD0; }
+        QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #D7B56D; }
+        QPushButton#nav:checked { background: #1D2118; color: #E0BF74; border-left-color: #D7B56D; }
+        QFrame#dropZone { background: #0D1612; border-color: #54472C; }
+        QFrame#conversionPanel, QFrame#conversionCard { background: #101713; border-color: #3E382A; }
+        QPushButton#selectButton, QPushButton#convertButton { background: #D7B56D; color: #10110D; }
+        QPushButton#modeButton:checked { background: #D7B56D; color: #11120E; border-color: #E8CF96; }
+    """,
+    "rafine": """
+        QMainWindow, QWidget#mainContent,
+        QScrollArea#contentScroll,
+        QScrollArea#contentScroll > QWidget > QWidget { background: #071214; }
+        QFrame#sidebar { background: #0B1719; border-right-color: #1D4747; }
+        QLabel#pageTitle { color: #EAF8F6; }
+        QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #38C4B2; }
+        QPushButton#nav:hover { background: #102526; border-color: #27625E; }
+        QPushButton#nav:checked { background: #102827; color: #55D3C3; border-left-color: #38C4B2; }
+        QFrame#dropZone { background: #0C181A; border-color: #2E5E5B; }
+        QFrame#conversionPanel, QFrame#conversionCard { background: #0E1A1C; border-color: #28504E; }
+        QComboBox#targetFormat { border-color: #2E7D75; }
+        QPushButton#selectButton, QPushButton#convertButton { background: #38C4B2; color: #071311; }
+        QProgressBar::chunk { background: #38C4B2; }
+        QPushButton#modeToggle:hover, QPushButton#modeToggle:checked { background: #102827; color: #55D3C3; }
+        QPushButton#modeButton:checked { background: #38C4B2; color: #071311; border-color: #6AE1D2; }
+    """,
+    "emir": """
+        QMainWindow, QWidget#mainContent,
+        QScrollArea#contentScroll,
+        QScrollArea#contentScroll > QWidget > QWidget { background: #0D0C0E; }
+        QFrame#sidebar { background: #121012; border-right-color: #4B2026; }
+        QLabel#pageTitle { color: #FFF4EE; }
+        QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #E3B768; }
+        QPushButton#nav:hover { background: #26161A; border-color: #70313B; }
+        QPushButton#nav:checked { background: #2A171B; color: #F2D4C8; border-left-color: #C92F40; }
+        QFrame#dropZone { background: #151114; border-color: #67313A; }
+        QFrame#conversionPanel, QFrame#conversionCard { background: #171315; border-color: #4E2A31; }
+        QComboBox#targetFormat { border-color: #7F3843; }
+        QPushButton#selectButton, QPushButton#convertButton { background: #C92F40; color: #FFF8F4; }
+        QPushButton#selectButton:hover, QPushButton#convertButton:hover { background: #DF4656; }
+        QProgressBar::chunk { background: #C92F40; }
+        QPushButton#modeToggle:hover, QPushButton#modeToggle:checked { background: #2A171B; color: #F0C5C9; }
+        QPushButton#modeButton:checked { background: #C92F40; color: #FFF8F4; border-color: #ED6B77; }
+    """,
+}
+
+
 def resource_path(name):
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return str(base / name)
@@ -62,6 +152,18 @@ def app_folder_path(name):
     """Paketlenmiş uygulamanın yanındaki, kullanıcı tarafından düzenlenebilir dosya."""
     base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     return base / name
+
+
+def theme_asset_path(asset_key):
+    """Bir tema varlığını dış uygulama klasöründe veya paket içinde bulur."""
+    for name in THEME_ASSET_CANDIDATES.get(asset_key, ()):
+        external = app_folder_path(name)
+        if external.exists():
+            return str(external)
+        bundled = Path(resource_path(name))
+        if bundled.exists():
+            return str(bundled)
+    return ""
 
 
 def version_key(version):
@@ -1460,6 +1562,8 @@ class DropZone(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("dropZone")
         self._glow_phase = 0.0
+        self._glow_color = QColor(235, 196, 111, 225)
+        self._halo_color = QColor(214, 177, 107, 50)
         self._border_timer = QTimer(self)
         self._border_timer.timeout.connect(self._advance_border_glow)
         self._border_timer.start(42)
@@ -1491,6 +1595,11 @@ class DropZone(QFrame):
         self._glow_phase = (self._glow_phase + 1.35) % 72
         self.update()
 
+    def set_glow_colors(self, glow, halo):
+        self._glow_color = QColor(glow)
+        self._halo_color = QColor(halo)
+        self.update()
+
     def paintEvent(self, event):
         super().paintEvent(event)
 
@@ -1501,7 +1610,7 @@ class DropZone(QFrame):
         painter.setRenderHint(QPainter.Antialiasing)
         rect = self.rect().adjusted(3, 3, -3, -3)
 
-        halo = QPen(QColor(214, 177, 107, 50), 5)
+        halo = QPen(self._halo_color, 5)
         halo.setStyle(Qt.DashLine)
         halo.setDashPattern([1.2, 11.0])
         halo.setDashOffset(-self._glow_phase)
@@ -1509,7 +1618,7 @@ class DropZone(QFrame):
         painter.setPen(halo)
         painter.drawRoundedRect(rect, 14, 14)
 
-        lights = QPen(QColor(235, 196, 111, 225), 1.7)
+        lights = QPen(self._glow_color, 1.7)
         lights.setStyle(Qt.DashLine)
         lights.setDashPattern([1.0, 12.5])
         lights.setDashOffset(-self._glow_phase)
@@ -1664,6 +1773,15 @@ class NavButton(QPushButton):
         self.setMinimumHeight(46)
 
 
+class ModeButton(QPushButton):
+    def __init__(self, text, mode_key):
+        super().__init__(text)
+        self.mode_key = mode_key
+        self.setObjectName("modeButton")
+        self.setCheckable(True)
+        self.setMinimumHeight(31)
+
+
 class ConversionCard(QFrame):
     def __init__(self, title, subtitle, parent=None):
         super().__init__(parent)
@@ -1712,6 +1830,8 @@ class MainWindow(QMainWindow):
         self.progress_dialog = None
         self._active_mode = None
         self.current_page = "converter"
+        self.active_theme = None
+        self._theme_icon = QIcon()
 
         self.setWindowTitle(APP_NAME)
         # İçerik kaydırılabildiğinden pencere daha küçük boyutlarda da
@@ -1724,17 +1844,21 @@ class MainWindow(QMainWindow):
         else:
             self.resize(1200, 780)
 
-        icon_path = resource_path("azra_gold.ico")
+        icon_path = theme_asset_path("azra_icon")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        self.setStyleSheet("""
+        self._base_stylesheet = """
             QMainWindow {
                 background: #0A0A0B;
             }
             QScrollArea#contentScroll,
             QScrollArea#contentScroll > QWidget > QWidget {
                 background: #0A0A0B;
+                border: none;
+            }
+            QScrollArea#sidebarScroll {
+                background: #101011;
                 border: none;
             }
             QWidget {
@@ -1792,6 +1916,42 @@ class MainWindow(QMainWindow):
                 background: #211E18;
                 color: #D6B16B;
                 border-left: 2px solid #D6B16B;
+            }
+            QFrame#modePanel {
+                background: #151413;
+                border: 1px solid #302C27;
+                border-radius: 10px;
+            }
+            QPushButton#modeToggle {
+                background: transparent;
+                color: #C6BDAF;
+                border: none;
+                border-radius: 7px;
+                min-height: 32px;
+                text-align: left;
+                padding: 0 9px;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 1px;
+            }
+            QPushButton#modeToggle:hover,
+            QPushButton#modeToggle:checked {
+                background: #211F1B;
+                color: #E4C57E;
+            }
+            QPushButton#modeButton {
+                background: #1A1917;
+                color: #A7A198;
+                border: 1px solid #34312C;
+                border-radius: 7px;
+                text-align: left;
+                padding: 0 10px;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QPushButton#modeButton:hover {
+                color: #F0EAE0;
+                border-color: #6B5633;
             }
             QFrame#dropZone {
                 background: #111112;
@@ -2022,7 +2182,8 @@ class MainWindow(QMainWindow):
                 background: #33312D;
                 border-radius: 4px;
             }
-        """)
+        """
+        self.setStyleSheet(self._base_stylesheet)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -2031,20 +2192,42 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
 
         # Sidebar
-        sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(225)
-        side = QVBoxLayout(sidebar)
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("sidebar")
+        self.sidebar.setMinimumWidth(205)
+        side = QVBoxLayout(self.sidebar)
+        side.setSizeConstraint(QLayout.SetMinimumSize)
         side.setContentsMargins(18, 24, 18, 18)
         side.setSpacing(8)
 
-        logo = QLabel()
-        logo.setAlignment(Qt.AlignCenter)
-        logo_pix = QPixmap(resource_path("azra_gold_logo_real_transparent.png"))
-        if not logo_pix.isNull():
-            logo_pix = logo_pix.scaled(165, 115, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo.setPixmap(logo_pix)
-        side.addWidget(logo)
+        self.brand_logo = QLabel()
+        self.brand_logo.setObjectName("brandLogo")
+        self.brand_logo.setAlignment(Qt.AlignCenter)
+        self.brand_logo.setFixedSize(179, 115)
+        side.addWidget(self.brand_logo, 0, Qt.AlignHCenter)
+
+        self.emir_video_widget = QVideoWidget()
+        self.emir_video_widget.setObjectName("emirVideo")
+        self.emir_video_widget.setFixedSize(179, 82)
+        self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatio)
+        self.emir_video_widget.setStyleSheet("background: #050505; border: 1px solid #5D252E; border-radius: 7px;")
+        self.emir_video_widget.hide()
+        side.addWidget(self.emir_video_widget, 0, Qt.AlignHCenter)
+
+        self.emir_photo = QLabel()
+        self.emir_photo.setObjectName("emirPhoto")
+        self.emir_photo.setAlignment(Qt.AlignCenter)
+        self.emir_photo.setFixedSize(82, 112)
+        self.emir_photo.setStyleSheet("background: #0A090A; border: 1px solid #5D252E; border-radius: 8px;")
+        self.emir_photo.hide()
+        side.addWidget(self.emir_photo, 0, Qt.AlignHCenter)
+
+        self.emir_audio = QAudioOutput(self)
+        self.emir_audio.setMuted(True)
+        self.emir_player = QMediaPlayer(self)
+        self.emir_player.setAudioOutput(self.emir_audio)
+        self.emir_player.setVideoOutput(self.emir_video_widget)
+        self.emir_player.setLoops(QMediaPlayer.Infinite)
 
         side.addSpacing(24)
 
@@ -2063,12 +2246,50 @@ class MainWindow(QMainWindow):
         self.nav_converter.setChecked(True)
         side.addStretch(1)
 
+        mode_panel = QFrame()
+        mode_panel.setObjectName("modePanel")
+        mode_layout = QVBoxLayout(mode_panel)
+        mode_layout.setContentsMargins(5, 5, 5, 5)
+        mode_layout.setSpacing(3)
+
+        self.mode_toggle = QPushButton("MODLAR   ▾")
+        self.mode_toggle.setObjectName("modeToggle")
+        self.mode_toggle.setCheckable(True)
+        self.mode_toggle.clicked.connect(self._toggle_mode_options)
+        mode_layout.addWidget(self.mode_toggle)
+
+        self.mode_options = QWidget()
+        options_layout = QVBoxLayout(self.mode_options)
+        options_layout.setContentsMargins(4, 3, 4, 4)
+        options_layout.setSpacing(6)
+
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        self.mode_buttons = {}
+        for mode_key in ("azra", "rafine", "emir"):
+            button = ModeButton(THEME_CONFIGS[mode_key]["name"], mode_key)
+            button.clicked.connect(lambda _checked=False, key=mode_key: self.apply_theme(key))
+            self.mode_group.addButton(button)
+            self.mode_buttons[mode_key] = button
+            options_layout.addWidget(button)
+        self.mode_options.hide()
+        mode_layout.addWidget(self.mode_options)
+        side.addWidget(mode_panel)
+
         version = QLabel(f"Azra Converter\nv{APP_VERSION}")
         version.setObjectName("version")
         version.setAlignment(Qt.AlignCenter)
         side.addWidget(version)
 
-        root.addWidget(sidebar)
+        self.sidebar_scroll = QScrollArea()
+        self.sidebar_scroll.setObjectName("sidebarScroll")
+        self.sidebar_scroll.setWidgetResizable(True)
+        self.sidebar_scroll.setFrameShape(QFrame.NoFrame)
+        self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.sidebar_scroll.setFixedWidth(225)
+        self.sidebar_scroll.setWidget(self.sidebar)
+        root.addWidget(self.sidebar_scroll)
 
         # Main content
         content = QWidget()
@@ -2077,6 +2298,13 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(42, 32, 42, 28)
         content_layout.setSpacing(15)
+
+        self.emir_star = QLabel()
+        self.emir_star.setObjectName("emirStar")
+        self.emir_star.setAlignment(Qt.AlignCenter)
+        self.emir_star.setFixedHeight(86)
+        self.emir_star.hide()
+        content_layout.addWidget(self.emir_star, 0, Qt.AlignHCenter)
 
         top = QHBoxLayout()
         heading = QVBoxLayout()
@@ -2197,9 +2425,89 @@ class MainWindow(QMainWindow):
         root.addWidget(content_scroll, 1)
 
         self.update_buttons()
+        saved_theme = self._window_settings.value("active_theme", "azra")
+        if saved_theme not in THEME_CONFIGS:
+            saved_theme = "azra"
+        self.apply_theme(saved_theme)
         QTimer.singleShot(250, self._show_pending_update_result)
 
+    @staticmethod
+    def _set_scaled_pixmap(label, path):
+        pixmap = QPixmap(path) if path else QPixmap()
+        if pixmap.isNull():
+            label.clear()
+            return False
+        label.setPixmap(
+            pixmap.scaled(
+                label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+        )
+        return True
+
+    def _stop_emir_media(self):
+        self.emir_player.stop()
+        self.emir_player.setSource(QUrl())
+        self.emir_video_widget.hide()
+        self.emir_photo.hide()
+        self.emir_star.hide()
+
+    def _start_emir_media(self):
+        photo_path = theme_asset_path("emir_photo")
+        if self._set_scaled_pixmap(self.emir_photo, photo_path):
+            self.emir_photo.show()
+
+        star_path = theme_asset_path("emir_star")
+        if self._set_scaled_pixmap(self.emir_star, star_path):
+            self.emir_star.show()
+
+        video_path = theme_asset_path("emir_video")
+        if video_path:
+            self.emir_player.setSource(QUrl.fromLocalFile(video_path))
+            self.emir_video_widget.show()
+            self.emir_player.play()
+
+    def _toggle_mode_options(self, expanded):
+        self.mode_options.setVisible(expanded)
+        self.mode_toggle.setText("MODLAR   ▴" if expanded else "MODLAR   ▾")
+
+    def apply_theme(self, mode_key):
+        """Seçilen temayı uygular ve önceki moda ait özel medyayı temizler."""
+        if mode_key not in THEME_CONFIGS:
+            return
+
+        self._stop_emir_media()
+        config = THEME_CONFIGS[mode_key]
+        self.active_theme = mode_key
+        self.setStyleSheet(self._base_stylesheet + THEME_STYLESHEETS[mode_key])
+        self.drop_zone.set_glow_colors(config["glow"], config["halo"])
+
+        for key, button in self.mode_buttons.items():
+            button.setChecked(key == mode_key)
+        self.mode_toggle.setChecked(False)
+        self._toggle_mode_options(False)
+
+        logo_key = config.get("logo")
+        if logo_key:
+            self._set_scaled_pixmap(self.brand_logo, theme_asset_path(logo_key))
+            self.brand_logo.show()
+        else:
+            self.brand_logo.clear()
+            self.brand_logo.hide()
+
+        icon_path = theme_asset_path(config["icon"])
+        self._theme_icon = QIcon(icon_path) if icon_path else QIcon()
+        self.setWindowIcon(self._theme_icon)
+        QApplication.instance().setWindowIcon(self._theme_icon)
+
+        if mode_key == "emir":
+            self._start_emir_media()
+
+        self._window_settings.setValue("active_theme", mode_key)
+
     def closeEvent(self, event):
+        self._stop_emir_media()
         self._window_settings.setValue("window_geometry", self.saveGeometry())
         super().closeEvent(event)
 
@@ -2543,7 +2851,7 @@ class MainWindow(QMainWindow):
 
         logo = QLabel()
         logo.setAlignment(Qt.AlignCenter)
-        pix = QPixmap(resource_path("azra_gold_logo_real_transparent.png"))
+        pix = QPixmap(theme_asset_path("azra_logo"))
         if not pix.isNull():
             logo.setPixmap(pix.scaled(220, 145, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(logo)
@@ -2838,7 +3146,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    icon_path = resource_path("azra_gold.ico")
+    icon_path = theme_asset_path("azra_icon")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 

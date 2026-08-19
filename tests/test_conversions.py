@@ -16,7 +16,8 @@ class _DummySignal:
 
 
 class _DummyWidget:
-    pass
+    def __init__(self, *_args, **_kwargs):
+        pass
 
 
 def _install_pyside_stubs():
@@ -24,10 +25,12 @@ def _install_pyside_stubs():
     core = types.ModuleType("PySide6.QtCore")
     gui = types.ModuleType("PySide6.QtGui")
     widgets = types.ModuleType("PySide6.QtWidgets")
+    multimedia = types.ModuleType("PySide6.QtMultimedia")
+    multimedia_widgets = types.ModuleType("PySide6.QtMultimediaWidgets")
     core.Qt = types.SimpleNamespace()
     core.QObject = _DummyWidget
     core.Signal = lambda *_args, **_kwargs: _DummySignal()
-    core.QThread = core.QTimer = core.QSettings = _DummyWidget
+    core.QThread = core.QTimer = core.QSettings = core.QUrl = _DummyWidget
     for name in ("QFont", "QIcon", "QPixmap", "QPainter", "QPainterPath", "QColor", "QPen"):
         setattr(gui, name, _DummyWidget)
     for name in (
@@ -35,14 +38,18 @@ def _install_pyside_stubs():
         "QGridLayout", "QLabel", "QPushButton", "QFileDialog", "QMessageBox",
         "QFrame", "QProgressBar", "QSizePolicy", "QSpacerItem", "QDialog",
         "QScrollArea", "QTableWidget", "QTableWidgetItem",
-        "QComboBox", "QCheckBox",
+        "QComboBox", "QCheckBox", "QButtonGroup", "QLayout",
     ):
         setattr(widgets, name, _DummyWidget)
+    multimedia.QAudioOutput = multimedia.QMediaPlayer = _DummyWidget
+    multimedia_widgets.QVideoWidget = _DummyWidget
     sys.modules.update({
         "PySide6": package,
         "PySide6.QtCore": core,
         "PySide6.QtGui": gui,
         "PySide6.QtWidgets": widgets,
+        "PySide6.QtMultimedia": multimedia,
+        "PySide6.QtMultimediaWidgets": multimedia_widgets,
     })
 
 

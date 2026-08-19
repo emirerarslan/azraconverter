@@ -4,10 +4,10 @@
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.1.4"
+#define MyAppVersion "1.1.12"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
-#define MyAppIcon "azra_gold.ico"
+#define MyAppIcon "azra.ico"
 
 [Setup]
 AppId={{B8A6F4D1-7B35-4E2A-9B71-AZRA2026CONV}
@@ -19,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.4
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.12
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
@@ -49,7 +49,7 @@ Source: "dist\AZRA CONVERTER\*"; DestDir: "{app}"; Flags: ignoreversion recurses
 Source: "update_config.json"; DestDir: "{app}"; Flags: ignoreversion
 
 ; ICO dosyasını ayrıca garanti altına alıyoruz.
-Source: "azra_gold.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "azra.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Kısayol doğrudan kurulum klasöründeki ICO'yu kullanır.
