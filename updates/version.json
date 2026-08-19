@@ -1,8 +1,8 @@
 {
-  "version": "1.1.20",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.20.exe",
+  "version": "1.1.21",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.21.exe",
   "sha256": "",
   "package_url": "",
   "package_sha256": "",
-  "notes": "PDF'den Excel'e aktarımda sayfaları birleştirme veya ayırma seçeneği eklendi."
+  "notes": "PDF sayfa silme, Excel uyumluluğu ve tema menüsü iyileştirmeleri eklendi."
 }

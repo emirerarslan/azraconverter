@@ -41,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.20"
+APP_VERSION = "1.1.21"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -72,6 +72,12 @@ THEME_ASSET_CANDIDATES = {
     "emir_video": ("emir-video.mp4", "emir-video.mov", "emir-video.avi"),
     "turkish_flag": ("bayrak.jpeg", "setup_flag.bmp"),
     "emir_star": ("emir-yıldız.png", "emir-yildiz.png", "emir-yıldız.jpg"),
+    "azra_converter_nav": ("Gold-donusturucu.png",),
+    "azra_history_nav": ("silver-gecmis.png",),
+    "azra_about_nav": ("bronz-hakkinda.png",),
+    "rafine_converter_nav": ("dolar-donusturucu.png",),
+    "rafine_history_nav": ("euro-gecmis.png",),
+    "rafine_about_nav": ("frang-hakkinda.png",),
 }
 
 THEME_CONFIGS = {
@@ -132,8 +138,16 @@ THEME_STYLESHEETS = {
         QFrame#sidebar { background: #121012; border-right-color: #4B2026; }
         QLabel#pageTitle { color: #FFF4EE; }
         QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #E3B768; }
-        QPushButton#nav:hover { background: #26161A; border-color: #70313B; }
-        QPushButton#nav:checked { background: #2A171B; color: #F2D4C8; border-left-color: #C92F40; }
+        QPushButton#nav {
+            background: #171215; color: #E8D7D4;
+            border: 1px solid #A77B2E; border-radius: 10px;
+        }
+        QPushButton#nav:hover, QPushButton#nav:hover:checked {
+            background: #35181F; color: #FFF6F1;
+            border: 1px solid #FFD271;
+        }
+        QPushButton#nav:pressed { background: #4A1D27; border-color: #FFF0AF; }
+        QPushButton#nav:checked { background: #171215; color: #FFF2EE; border: 1px solid #A77B2E; }
         QFrame#dropZone { background: #151114; border-color: #67313A; }
         QFrame#conversionPanel, QFrame#conversionCard { background: #171315; border-color: #4E2A31; }
         QComboBox#targetFormat { border-color: #7F3843; }
@@ -429,6 +443,32 @@ def find_libreoffice():
     return next((item for item in candidates if item and Path(item).exists()), None)
 
 
+def ensure_spreadsheet_dependency_compatibility():
+    """OpenPyXL'i yeni NumPy sürümleriyle güvenli biçimde yükler.
+
+    Bazı NumPy dağıtımları ``numpy.short`` takma adını kaldırabiliyor. Eski
+    OpenPyXL sürümleri bu adı modül yüklenirken kullandığından XLSX içeren tüm
+    dönüşümler başlamadan kesiliyordu. NumPy isteğe bağlıdır; kurulu değilse
+    OpenPyXL kendi standart sayı türleriyle çalışmaya devam eder.
+    """
+    try:
+        import numpy
+    except ImportError:
+        return
+
+    aliases = {
+        "short": "int16",
+        "ushort": "uint16",
+        "intc": "int32",
+        "uintc": "uint32",
+        "longlong": "int64",
+        "ulonglong": "uint64",
+    }
+    for legacy_name, replacement_name in aliases.items():
+        if not hasattr(numpy, legacy_name) and hasattr(numpy, replacement_name):
+            setattr(numpy, legacy_name, getattr(numpy, replacement_name))
+
+
 def libreoffice_convert(src, out, target_format):
     """LibreOffice ile güvenli bir geçici klasörde biçim dönüştürür."""
     soffice = find_libreoffice()
@@ -517,6 +557,7 @@ def _normalise_word_document(src, temp_dir):
 
 def _normalise_spreadsheet(src, temp_dir):
     """Yaygın tablo biçimlerini kayıpsız işlem için XLSX'e normalleştirir."""
+    ensure_spreadsheet_dependency_compatibility()
     from openpyxl import Workbook
 
     src = Path(src)
@@ -757,6 +798,7 @@ def pdf_to_excel(src, progress, separate_pages=True):
         src.with_name(src.stem + "_Excel.xlsx")
     )
 
+    ensure_spreadsheet_dependency_compatibility()
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment
 
@@ -873,6 +915,62 @@ def pdf_to_excel(src, progress, separate_pages=True):
             )
 
     wb.save(str(out))
+    return out
+
+
+def pdf_page_count(src):
+    """PDF'in sayfa sayısını hızlıca ve metin/OCR işlemi yapmadan döndürür."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(src))
+    if reader.is_encrypted:
+        try:
+            if reader.decrypt("") == 0:
+                raise RuntimeError("Şifreli PDF'in sayfaları okunamadı.")
+        except Exception as exc:
+            raise RuntimeError("Şifreli PDF'in sayfaları okunamadı.") from exc
+    return len(reader.pages)
+
+
+def remove_pdf_pages(src, pages_to_remove, progress):
+    """Seçilen 1 tabanlı sayfa numaralarını çıkarıp yeni bir PDF oluşturur."""
+    from pypdf import PdfReader, PdfWriter
+
+    src = Path(src)
+    out = unique_output(src.with_name(src.stem + "_Sayfalari_Silinmis.pdf"))
+    reader = PdfReader(str(src))
+    if reader.is_encrypted:
+        try:
+            if reader.decrypt("") == 0:
+                raise RuntimeError("Şifreli PDF'in sayfaları silinemiyor.")
+        except Exception as exc:
+            raise RuntimeError("Şifreli PDF'in sayfaları silinemiyor.") from exc
+
+    total = len(reader.pages)
+    remove_set = {int(page) for page in pages_to_remove}
+    if not remove_set:
+        raise RuntimeError("Silmek için en az bir sayfa seçin.")
+    if any(page < 1 or page > total for page in remove_set):
+        raise RuntimeError("Geçersiz PDF sayfa numarası seçildi.")
+    if len(remove_set) >= total:
+        raise RuntimeError("PDF'in tüm sayfaları silinemez. En az bir sayfa kalmalı.")
+
+    writer = PdfWriter()
+    for index, page in enumerate(reader.pages, start=1):
+        if index not in remove_set:
+            writer.add_page(page)
+        progress.emit(int(index / total * 95))
+
+    metadata = reader.metadata
+    if metadata:
+        writer.add_metadata({
+            str(key): str(value)
+            for key, value in metadata.items()
+            if value is not None
+        })
+    with open(out, "wb") as output_file:
+        writer.write(output_file)
+    progress.emit(100)
     return out
 
 
@@ -1035,6 +1133,7 @@ def excel_to_pdf_with_microsoft_excel(src, out):
 
 
 def excel_to_pdf(src, progress):
+    ensure_spreadsheet_dependency_compatibility()
     from openpyxl import load_workbook
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -1276,6 +1375,7 @@ def word_to_pdf(src, progress):
 def word_to_excel(src, progress):
     """Word metnini ve her tabloyu düzenlenebilir Excel sayfalarına aktarır."""
     from docx import Document
+    ensure_spreadsheet_dependency_compatibility()
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
@@ -1333,6 +1433,7 @@ def excel_to_word(src, progress):
     from docx import Document
     from docx.enum.section import WD_ORIENT
     from docx.shared import Inches, Pt
+    ensure_spreadsheet_dependency_compatibility()
     from openpyxl import load_workbook
 
     src = Path(src)
@@ -1521,11 +1622,14 @@ class ConverterWorker(QObject):
     progress = Signal(int)
     cancelled = Signal()
 
-    def __init__(self, mode, source, pdf_excel_separate_pages=True):
+    def __init__(
+        self, mode, source, pdf_excel_separate_pages=True, pages_to_remove=None
+    ):
         super().__init__()
         self.mode = mode
         self.source = source
         self.pdf_excel_separate_pages = pdf_excel_separate_pages
+        self.pages_to_remove = pages_to_remove or []
         self._cancel_event = threading.Event()
 
     def cancel(self):
@@ -1543,6 +1647,10 @@ class ConverterWorker(QObject):
                 result = pdf_to_excel(
                     self.source, progress,
                     separate_pages=self.pdf_excel_separate_pages,
+                )
+            elif self.mode == "pdf_delete_pages":
+                result = remove_pdf_pages(
+                    self.source, self.pages_to_remove, progress
                 )
             elif self.mode == "pdf_word":
                 result = pdf_to_word(self.source, progress)
@@ -1607,8 +1715,17 @@ class DropZone(QFrame):
 
     def _advance_border_glow(self):
         """Altın şerit ışığını çerçevenin etrafında kesintisiz ilerletir."""
+        if not self._should_show_border():
+            return
         self._glow_phase = (self._glow_phase + 1.35) % 72
         self.update()
+
+    def _should_show_border(self):
+        return bool(
+            self.property("selected")
+            or self.property("dragging")
+            or self.underMouse()
+        )
 
     def set_glow_colors(self, glow, halo):
         self._glow_color = QColor(glow)
@@ -1617,6 +1734,8 @@ class DropZone(QFrame):
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        if not self._should_show_border():
+            return
 
         # Stil sayfasının ince çerçevesinin üzerine iki katmanlı, hareketli bir
         # LED şeridi çizilir. Kesiklerin kayması, ışığın çerçeveyi dolaştığı
@@ -1641,6 +1760,14 @@ class DropZone(QFrame):
         painter.setPen(lights)
         painter.drawRoundedRect(rect, 14, 14)
         painter.end()
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
 
     def show_file(self, path):
         path = Path(path)
@@ -1673,17 +1800,20 @@ class DropZone(QFrame):
             self.setProperty("dragging", True)
             self.style().unpolish(self)
             self.style().polish(self)
+            self.update()
 
     def dragLeaveEvent(self, event):
         self.setProperty("dragging", False)
         self.style().unpolish(self)
         self.style().polish(self)
+        self.update()
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event):
         self.setProperty("dragging", False)
         self.style().unpolish(self)
         self.style().polish(self)
+        self.update()
         urls = event.mimeData().urls()
         if urls:
             path = urls[0].toLocalFile()
@@ -1780,11 +1910,230 @@ class ConversionProgressDialog(QDialog):
         super().closeEvent(event)
 
 
+class PdfPageDeletionDialog(QDialog):
+    """PDF sayfalarını silme seçimini anlaşılır bir ızgarada sunar."""
+
+    def __init__(self, page_count, parent=None):
+        super().__init__(parent)
+        self._page_count = page_count
+        self._page_checks = []
+        self.setWindowTitle("PDF Sayfalarını Sil")
+        self.setModal(True)
+        self.resize(520, 510)
+        self.setStyleSheet("""
+            QDialog { background: #0F0F10; border: 1px solid #4A3C25; }
+            QLabel#deleteTitle { color: #D6B16B; font-size: 20px; font-weight: 800; }
+            QLabel#deleteHint, QLabel#deleteSummary { color: #BBB3A7; font-size: 12px; }
+            QScrollArea { background: #151413; border: 1px solid #3B3429; border-radius: 9px; }
+            QCheckBox {
+                color: #E6DED0; background: #1B1916; border: 1px solid #3D362B;
+                border-radius: 7px; padding: 8px; font-weight: 700;
+            }
+            QCheckBox:hover { border-color: #B99552; background: #242016; }
+            QCheckBox:checked { color: #FFCE88; background: #352217; border-color: #D17B3E; }
+            QPushButton {
+                background: #1B1916; color: #D6B16B; border: 1px solid #6B5633;
+                border-radius: 8px; min-height: 34px; padding: 0 13px; font-weight: 800;
+            }
+            QPushButton:hover { background: #D6B16B; color: #11100E; }
+            QPushButton#deleteConfirm { background: #C95B3C; color: #FFF8F2; border-color: #E38B64; }
+            QPushButton#deleteConfirm:hover { background: #E16A47; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(11)
+
+        title = QLabel("SİLİNECEK SAYFALARI SEÇİN")
+        title.setObjectName("deleteTitle")
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "İşaretlenen sayfalar silinir. İşaretlenmeyen sayfalar PDF'te kalır."
+        )
+        hint.setObjectName("deleteHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        actions = QHBoxLayout()
+        select_all = QPushButton("TÜMÜNÜ SEÇ")
+        select_all.clicked.connect(lambda: self._set_all_checked(True))
+        clear_all = QPushButton("SEÇİMİ TEMİZLE")
+        clear_all.clicked.connect(lambda: self._set_all_checked(False))
+        actions.addWidget(select_all)
+        actions.addWidget(clear_all)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        page_list = QWidget()
+        grid = QGridLayout(page_list)
+        grid.setContentsMargins(12, 12, 12, 12)
+        grid.setSpacing(8)
+        for page_number in range(1, page_count + 1):
+            check = QCheckBox(f"Sayfa {page_number}")
+            check.stateChanged.connect(self._update_summary)
+            self._page_checks.append(check)
+            grid.addWidget(check, (page_number - 1) // 3, (page_number - 1) % 3)
+        scroll.setWidget(page_list)
+        layout.addWidget(scroll, 1)
+
+        self.summary = QLabel()
+        self.summary.setObjectName("deleteSummary")
+        layout.addWidget(self.summary)
+        self._update_summary()
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("İPTAL")
+        cancel.clicked.connect(self.reject)
+        confirm = QPushButton("SEÇİLEN SAYFALARI SİL")
+        confirm.setObjectName("deleteConfirm")
+        confirm.clicked.connect(self._confirm)
+        buttons.addWidget(cancel)
+        buttons.addWidget(confirm)
+        layout.addLayout(buttons)
+
+    def selected_pages(self):
+        return [
+            index for index, check in enumerate(self._page_checks, start=1)
+            if check.isChecked()
+        ]
+
+    def _set_all_checked(self, checked):
+        for check in self._page_checks:
+            check.setChecked(checked)
+        self._update_summary()
+
+    def _update_summary(self, *_args):
+        deleted = len(self.selected_pages())
+        remaining = self._page_count - deleted
+        self.summary.setText(
+            f"Silinecek: {deleted} sayfa  •  Kalacak: {remaining} sayfa"
+        )
+
+    def _confirm(self):
+        deleted = len(self.selected_pages())
+        if not deleted:
+            QMessageBox.information(self, "Sayfa seçin", "Silmek için en az bir sayfa işaretleyin.")
+            return
+        if deleted == self._page_count:
+            QMessageBox.warning(self, "En az bir sayfa kalsın", "PDF'in tüm sayfaları silinemez.")
+            return
+        self.accept()
+
+
 class NavButton(QPushButton):
-    def __init__(self, text):
+    """Temaya göre özgün görsel veya sade Emir gezinti düğmesi."""
+
+    IMAGE_ASSETS = {
+        "azra": ("azra_converter_nav", "azra_history_nav", "azra_about_nav"),
+        "rafine": ("rafine_converter_nav", "rafine_history_nav", "rafine_about_nav"),
+    }
+    ACCENT_COLORS = {
+        "azra": QColor("#F2CA62"),
+        "rafine": QColor("#D9C2E8"),
+    }
+
+    def __init__(self, text, nav_index):
         super().__init__(text)
+        self._label = text.strip()
+        self._nav_index = nav_index
+        self._theme_key = "emir"
+        self._nav_pixmap = QPixmap()
+        self._scaled_nav_pixmap = QPixmap()
+        self._scaled_nav_cache_key = None
+        self._hover_glow = None
         self.setCheckable(True)
         self.setMinimumHeight(46)
+        self.setAccessibleName(self._label)
+
+    def set_theme(self, theme_key):
+        self._theme_key = theme_key
+        asset_keys = self.IMAGE_ASSETS.get(theme_key)
+        asset_path = theme_asset_path(asset_keys[self._nav_index]) if asset_keys else ""
+        self._nav_pixmap = QPixmap(asset_path) if asset_path else QPixmap()
+        self._scaled_nav_pixmap = QPixmap()
+        self._scaled_nav_cache_key = None
+        uses_image = not self._nav_pixmap.isNull()
+        self.setText("" if uses_image else f"  {self._label}")
+        self.setIcon(QIcon(theme_asset_path("emir_star")) if theme_key == "emir" else QIcon())
+        self.setIconSize(QSize(18, 18))
+        self.setMinimumHeight(82 if uses_image else 46)
+        self.setProperty("imageNav", uses_image)
+        if self._hover_glow is not None:
+            self._hover_glow.setEnabled(theme_key == "emir" and self.underMouse())
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._nav_pixmap.isNull():
+            if self._theme_key == "emir":
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setPen(QPen(QColor("#5A421B"), 1))
+                painter.drawRoundedRect(self.rect().adjusted(4, 4, -5, -5), 7, 7)
+                painter.setPen(QPen(QColor(244, 199, 91, 105), 0.7))
+                painter.drawRoundedRect(self.rect().adjusted(6, 6, -7, -7), 5, 5)
+                painter.end()
+            return
+
+        # Butonlar Windows ekran ölçeklemesinde (ör. %125 / %150) bulanık
+        # görünmesin diye görseli mantıksal değil, fiziksel piksel boyutunda
+        # üretiriz. Sonuç tekrar kullanılacağından her çizimde yeniden
+        # örnekleme yapılmaz.
+        ratio = self.devicePixelRatioF()
+        cache_key = (self.width(), self.height(), round(ratio * 100))
+        if cache_key != self._scaled_nav_cache_key:
+            pixel_size = QSize(
+                max(1, round(self.width() * ratio)),
+                max(1, round(self.height() * ratio)),
+            )
+            self._scaled_nav_pixmap = self._nav_pixmap.scaled(
+                pixel_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self._scaled_nav_pixmap.setDevicePixelRatio(ratio)
+            self._scaled_nav_cache_key = cache_key
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        pixmap = self._scaled_nav_pixmap
+        pixmap_width = round(pixmap.width() / ratio)
+        pixmap_height = round(pixmap.height() / ratio)
+        x = (self.width() - pixmap_width) // 2
+        y = (self.height() - pixmap_height) // 2
+        painter.drawPixmap(x, y, pixmap)
+        # Görsel sekmelerde sabit bir dış çerçeve kullanılmaz. Vurgu yalnızca
+        # imleç gerçekten butonun üzerindeyken görünür.
+        if self.underMouse():
+            accent = self.ACCENT_COLORS.get(self._theme_key, QColor("#D6B16B"))
+            accent.setAlpha(185)
+            pen = QPen(accent, 1.25)
+            painter.setPen(pen)
+            painter.drawRoundedRect(self.rect().adjusted(2, 2, -3, -3), 10, 10)
+        painter.end()
+
+    def enterEvent(self, event):
+        if self._theme_key == "emir":
+            if self._hover_glow is None:
+                self._hover_glow = QGraphicsDropShadowEffect(self)
+                self._hover_glow.setBlurRadius(28)
+                self._hover_glow.setOffset(0, 0)
+                self._hover_glow.setColor(QColor(239, 72, 91, 225))
+                self.setGraphicsEffect(self._hover_glow)
+            self._hover_glow.setEnabled(True)
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if self._theme_key == "emir":
+            if self._hover_glow is not None:
+                self._hover_glow.setEnabled(False)
+        self.update()
+        super().leaveEvent(event)
 
 
 class ModeButton(QPushButton):
@@ -2060,6 +2409,14 @@ class MainWindow(QMainWindow):
                 color: #D6B16B;
                 border-left: 2px solid #D6B16B;
             }
+            QPushButton#nav[imageNav="true"],
+            QPushButton#nav[imageNav="true"]:hover,
+            QPushButton#nav[imageNav="true"]:pressed,
+            QPushButton#nav[imageNav="true"]:checked {
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
             QFrame#modePanel {
                 background: #151413;
                 border: 1px solid #302C27;
@@ -2098,7 +2455,7 @@ class MainWindow(QMainWindow):
             }
             QFrame#dropZone {
                 background: #111112;
-                border: 1px dashed #4A453D;
+                border: none;
                 border-radius: 16px;
                 min-height: 210px;
             }
@@ -2379,9 +2736,9 @@ class MainWindow(QMainWindow):
 
         side.addSpacing(24)
 
-        self.nav_converter = NavButton("  Dönüştürücü")
-        self.nav_history = NavButton("  Geçmiş")
-        self.nav_about = NavButton("  Hakkında")
+        self.nav_converter = NavButton("Dönüştürücü", 0)
+        self.nav_history = NavButton("Geçmiş", 1)
+        self.nav_about = NavButton("Hakkında", 2)
         for b in [self.nav_converter, self.nav_history, self.nav_about]:
             b.setObjectName("nav")
             side.addWidget(b)
@@ -2656,6 +3013,9 @@ class MainWindow(QMainWindow):
         self.active_theme = mode_key
         self.setStyleSheet(self._base_stylesheet + THEME_STYLESHEETS[mode_key])
         self.drop_zone.set_glow_colors(config["glow"], config["halo"])
+
+        for button in (self.nav_converter, self.nav_history, self.nav_about):
+            button.set_theme(mode_key)
 
         for key, button in self.mode_buttons.items():
             button.setChecked(key == mode_key)
@@ -3145,6 +3505,7 @@ class MainWindow(QMainWindow):
             return [
                 ("pdf_excel", "Excel belgesi (.xlsx)", "OCR ile tabloları çalışma sayfasına aktarır."),
                 ("pdf_word", "Word belgesi (.docx)", "OCR ile düzenlenebilir metin oluşturur."),
+                ("pdf_delete_pages", "PDF sayfalarını sil (.pdf)", "Silinecek sayfaları seçip yeni bir PDF oluşturur."),
             ]
         if ext in SPREADSHEET_EXTENSIONS:
             return [
@@ -3205,6 +3566,27 @@ class MainWindow(QMainWindow):
             return
         mode = option[0]
 
+        pages_to_remove = []
+        if mode == "pdf_delete_pages":
+            try:
+                page_count = pdf_page_count(self.source_file)
+            except Exception as exc:
+                QMessageBox.critical(
+                    self, "PDF okunamadı",
+                    "PDF sayfaları okunamadı.\n\n" + (str(exc) or "Bilinmeyen hata"),
+                )
+                return
+            if page_count < 2:
+                QMessageBox.information(
+                    self, "Silinecek sayfa yok",
+                    "Sayfa silmek için PDF'te en az iki sayfa olmalı.",
+                )
+                return
+            dialog = PdfPageDeletionDialog(page_count, self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            pages_to_remove = dialog.selected_pages()
+
         self.progress.setVisible(False)
         self.progress.setValue(0)
         self.status.setText("Dönüştürülüyor...")
@@ -3217,6 +3599,7 @@ class MainWindow(QMainWindow):
             mode,
             self.source_file,
             pdf_excel_separate_pages=bool(self.pdf_excel_page_mode.currentData()),
+            pages_to_remove=pages_to_remove,
         )
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)

@@ -74,6 +74,22 @@ class ConversionTests(unittest.TestCase):
         with self.assertRaises(main.ConversionCancelled):
             worker.check_cancelled()
 
+    def test_spreadsheet_compatibility_restores_missing_numpy_short_alias(self):
+        try:
+            import numpy
+        except ImportError:
+            self.skipTest("NumPy bu ortamda kurulu değil.")
+
+        original = getattr(numpy, "short", None)
+        if original is None:
+            self.skipTest("Bu NumPy sürümünde kısa sayı türü tanımlı değil.")
+        delattr(numpy, "short")
+        try:
+            main.ensure_spreadsheet_dependency_compatibility()
+            self.assertIs(numpy.short, numpy.int16)
+        finally:
+            numpy.short = original
+
     def test_custom_update_manifest_is_normalised(self):
         manifest = main.normalise_update_manifest(
             {
@@ -251,6 +267,28 @@ class ConversionTests(unittest.TestCase):
             values = [cell.value for row in merged_workbook.active.iter_rows() for cell in row]
             self.assertIn("Gold", values)
             self.assertIn("Silver", values)
+
+    def test_pdf_page_removal_preserves_unselected_pages(self):
+        from pypdf import PdfReader
+        from reportlab.pdfgen import canvas
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            source = folder / "three-pages.pdf"
+            pdf = canvas.Canvas(str(source))
+            for number in range(1, 4):
+                pdf.drawString(72, 760, f"Page {number}")
+                pdf.showPage()
+            pdf.save()
+
+            self.assertEqual(main.pdf_page_count(source), 3)
+            output = main.remove_pdf_pages(source, [2], Progress())
+            reader = PdfReader(output)
+            self.assertEqual(len(reader.pages), 2)
+            content = "\n".join(page.extract_text() or "" for page in reader.pages)
+            self.assertIn("Page 1", content)
+            self.assertIn("Page 3", content)
+            self.assertNotIn("Page 2", content)
 
     def test_pdf_exports_are_valid(self):
         from docx import Document

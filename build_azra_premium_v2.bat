@@ -74,6 +74,12 @@ echo PREMIUM EXE klasoru olusturuluyor...
  --add-data "emir-logo.jpg;." ^
  --add-data "emir-video.mp4;." ^
  --add-data "emir-yıldız.png;." ^
+ --add-data "Gold-donusturucu.png;." ^
+ --add-data "silver-gecmis.png;." ^
+ --add-data "bronz-hakkinda.png;." ^
+ --add-data "dolar-donusturucu.png;." ^
+ --add-data "euro-gecmis.png;." ^
+ --add-data "frang-hakkinda.png;." ^
  --add-data "update_config.json;." ^
  --add-data "%TESS_DIR%;tesseract" ^
  main.py
