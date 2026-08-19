@@ -41,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.18"
+APP_VERSION = "1.1.19"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -2342,8 +2342,8 @@ class MainWindow(QMainWindow):
         self.emir_video_widget.setObjectName("emirVideo")
         self.emir_video_widget.setFixedSize(179, 82)
         if QT_MULTIMEDIA_AVAILABLE:
-            # Videoyu yanlarda siyah şerit bırakmadan tüm alana yay.
-            self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatioByExpanding)
+            # Siyah şerit bırakmadan tüm alanı kapla.
+            self.emir_video_widget.setAspectRatioMode(Qt.IgnoreAspectRatio)
         self.emir_video_widget.setStyleSheet("border: 1px solid #5D252E; border-radius: 7px;")
         self.emir_video_widget.hide()
         side.addWidget(self.emir_video_widget, 0, Qt.AlignHCenter)
@@ -2983,29 +2983,25 @@ class MainWindow(QMainWindow):
     def show_about(self):
         self._select_nav(self.nav_about)
 
-        dialog = self._dark_dialog(f"{APP_NAME} Hakkında", 620, 640)
+        dialog = self._dark_dialog(f"{APP_NAME} Hakkında", 480, 520)
+        dialog.setMinimumSize(430, 450)
+        dialog.setSizeGripEnabled(True)
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(34, 28, 34, 24)
-        layout.setSpacing(9)
+        layout.setContentsMargins(26, 22, 26, 20)
+        layout.setSpacing(7)
 
         # Azra Gold logosu yerine Türk bayrağı ve Emir Can Erarslan fotoğrafı.
-        identity = QWidget()
-        identity_layout = QVBoxLayout(identity)
-        identity_layout.setContentsMargins(0, 0, 0, 0)
-        identity_layout.setSpacing(6)
-
         flag = QLabel()
         flag.setAlignment(Qt.AlignCenter)
-        flag.setFixedSize(180, 96)
+        flag.setFixedSize(260, 138)
         self._set_scaled_pixmap(flag, theme_asset_path("turkish_flag"))
-        identity_layout.addWidget(flag)
+        layout.addWidget(flag, 0, Qt.AlignHCenter)
 
         photo = QLabel()
         photo.setAlignment(Qt.AlignCenter)
-        photo.setFixedSize(62, 82)
+        photo.setFixedSize(72, 96)
         self._set_scaled_pixmap(photo, theme_asset_path("emir_photo"))
-        identity_layout.addWidget(photo)
-        layout.addWidget(identity)
+        layout.addWidget(photo, 0, Qt.AlignHCenter)
 
         brand = QLabel("CONVERTER")
         brand.setAlignment(Qt.AlignCenter)
@@ -3037,13 +3033,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(purpose_title)
 
         purpose = QLabel(
-            "PDF, Word ve Excel belgeleri arasında altı yönlü dönüşüm yapmak.<br><br>"
-            "PDF -> Excel ve PDF -> Word işlemlerinde OCR desteğiyle taranmış "
-            "belgelerden içerik çıkarılır. Word/Excel -> PDF işlemlerinde önce "
-            "Microsoft Office, ardından LibreOffice kullanılarak sayfa düzeni "
-            "mümkün olan en yüksek kalitede korunur.<br><br>"
-            "Yaygın biçimler: PDF; DOC, DOCX, DOCM, DOT/DOTX, ODT, RTF, TXT; "
-            "XLS, XLSX, XLSM, XLSB, XLT/XLTX, ODS, CSV ve TSV."
+            "PDF, Word ve Excel belgeleri arasında hızlı ve güvenilir dönüşüm sağlar.<br>"
+            "Taranmış PDF'lerde OCR desteği sunar; belge düzenini mümkün olduğunca korur."
         )
         purpose.setAlignment(Qt.AlignCenter)
         purpose.setWordWrap(True)

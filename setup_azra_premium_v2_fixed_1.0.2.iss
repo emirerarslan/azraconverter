@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "ConverteR"
-#define MyAppVersion "1.1.18"
+#define MyAppVersion "1.1.19"
 #define MyAppPublisher "ConverteR"
 #define MyAppExeName "ConverteR.exe"
 #define MyAppIcon "converter-new.ico"
@@ -19,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=ConverteR
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=CONVERTER-SETUP-1.1.18
+OutputBaseFilename=CONVERTER-SETUP-1.1.19
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
