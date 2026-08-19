@@ -41,13 +41,13 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.14"
+APP_VERSION = "1.1.17"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
-    "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
-    "https://api.github.com/repos/emirerarslan/azraconverter/releases/latest",
-    "https://raw.githubusercontent.com/emirerarslan/azraconverter/main/updates/version.json",
+    "https://github.com/emirerarslan/ConverteR/releases/latest/download/version.json",
+    "https://api.github.com/repos/emirerarslan/ConverteR/releases/latest",
+    "https://raw.githubusercontent.com/emirerarslan/ConverteR/main/updates/version.json",
 ]
 
 PDF_EXTENSIONS = {".pdf"}
@@ -70,6 +70,7 @@ THEME_ASSET_CANDIDATES = {
     "rafine_logo": ("rafine-logo.jpg", "rafine-logo.png"),
     "emir_photo": ("emir-foto.png", "emir-foto.jpg", "emir-logo.jpg"),
     "emir_video": ("emir-video.mp4", "emir-video.mov", "emir-video.avi"),
+    "turkish_flag": ("bayrak.jpeg", "setup_flag.bmp"),
     "emir_star": ("emir-yıldız.png", "emir-yildiz.png", "emir-yıldız.jpg"),
 }
 
@@ -2341,8 +2342,9 @@ class MainWindow(QMainWindow):
         self.emir_video_widget.setObjectName("emirVideo")
         self.emir_video_widget.setFixedSize(179, 82)
         if QT_MULTIMEDIA_AVAILABLE:
-            self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatio)
-        self.emir_video_widget.setStyleSheet("background: #050505; border: 1px solid #5D252E; border-radius: 7px;")
+            # Videoyu yanlarda siyah şerit bırakmadan tüm alana yay.
+            self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatioByExpanding)
+        self.emir_video_widget.setStyleSheet("border: 1px solid #5D252E; border-radius: 7px;")
         self.emir_video_widget.hide()
         side.addWidget(self.emir_video_widget, 0, Qt.AlignHCenter)
 
@@ -2980,12 +2982,26 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(34, 28, 34, 24)
         layout.setSpacing(9)
 
-        logo = QLabel()
-        logo.setAlignment(Qt.AlignCenter)
-        pix = QPixmap(theme_asset_path("azra_logo"))
-        if not pix.isNull():
-            logo.setPixmap(pix.scaled(220, 145, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        layout.addWidget(logo)
+        # Azra Gold logosu yerine Türk bayrağı ve Emir Can Erarslan fotoğrafı.
+        identity = QWidget()
+        identity_layout = QVBoxLayout(identity)
+        identity_layout.setContentsMargins(0, 0, 0, 0)
+        identity_layout.setSpacing(6)
+
+        flag = QLabel()
+        flag.setAlignment(Qt.AlignCenter)
+        flag_pix = QPixmap(theme_asset_path("turkish_flag"))
+        if not flag_pix.isNull():
+            flag.setPixmap(flag_pix.scaled(180, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        identity_layout.addWidget(flag)
+
+        photo = QLabel()
+        photo.setAlignment(Qt.AlignCenter)
+        photo_pix = QPixmap(theme_asset_path("emir_photo"))
+        if not photo_pix.isNull():
+            photo.setPixmap(photo_pix.scaled(62, 82, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        identity_layout.addWidget(photo)
+        layout.addWidget(identity)
 
         brand = QLabel("CONVERTER")
         brand.setAlignment(Qt.AlignCenter)

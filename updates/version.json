@@ -1,8 +1,8 @@
 {
-  "version": "1.1.11",
-  "download_url": "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-1.1.11.exe",
-  "sha256": "",
+  "version": "1.1.17",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.1.17/CONVERTER-SETUP-1.1.17.exe",
+  "sha256": "b845f7a8861c3b1d62c608bb2f9581b3c0de5d6d1001508ad1eeb82566ee5eb9",
   "package_url": "",
   "package_sha256": "",
-  "notes": "Türkçe karakter kodlaması ve güncelleme sonucu bildirimi iyileştirildi."
+  "notes": "Türk bayrağı videosu ve Hakkında ekranı yenilendi."
 }

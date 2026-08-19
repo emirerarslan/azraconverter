@@ -10,13 +10,19 @@ echo.
 
 set "TESS_DIR=C:\Program Files\Tesseract-OCR"
 
-rem Always build with Python 3.  This prevents a system Python association
-rem from interpreting UTF-8 source files with a legacy code page.
-where py >nul 2>nul
+rem Windows App Execution Alias (py/python) can point at an empty environment.
+rem Prefer the per-user Python installation, then verify that it has PySide6.
+set "PYTHON_CMD=%LocalAppData%\Python\bin\python.exe"
+if not exist "%PYTHON_CMD%" set "PYTHON_CMD=python"
+
+"%PYTHON_CMD%" -c "import PySide6, PyInstaller" >nul 2>nul
 if errorlevel 1 (
-    set "PYTHON_CMD=python"
-) else (
-    set "PYTHON_CMD=py -3"
+    echo HATA: PySide6 ve PyInstaller bulunan Python ortami bulunamadi.
+    echo Beklenen yol: %LocalAppData%\Python\bin\python.exe
+    echo Bu ortamda su komutu calistirin:
+    echo "%PYTHON_CMD%" -m pip install -r requirements.txt pyinstaller
+    pause
+    exit /b 1
 )
 
 if not exist "main.py" (
@@ -37,16 +43,15 @@ if not exist "azra-logo.png" (
     exit /b 1
 )
 
-if not exist "%TESS_DIR%\tesseract.exe" (
-    echo HATA: Tesseract bulunamadi:
-    echo %TESS_DIR%\tesseract.exe
+if not exist "bayrak.jpeg" (
+    echo HATA: bayrak.jpeg bulunamadi.
     pause
     exit /b 1
 )
 
-%PYTHON_CMD% -m pip install --upgrade pyinstaller
-if errorlevel 1 (
-    echo HATA: PyInstaller kurulumu basarisiz.
+if not exist "%TESS_DIR%\tesseract.exe" (
+    echo HATA: Tesseract bulunamadi:
+    echo %TESS_DIR%\tesseract.exe
     pause
     exit /b 1
 )
@@ -59,11 +64,12 @@ if exist "ConverteR.spec" del /q "ConverteR.spec"
 
 echo.
 echo PREMIUM EXE klasoru olusturuluyor...
-%PYTHON_CMD% -m PyInstaller --noconfirm --clean --onedir --windowed ^
+"%PYTHON_CMD%" -m PyInstaller --noconfirm --clean --onedir --windowed ^
  --name "ConverteR" ^
  --icon "converter-new.ico" ^
  --add-data "converter-new.ico;." ^
  --add-data "azra-logo.png;." ^
+ --add-data "bayrak.jpeg;." ^
  --add-data "rafine-logo.jpg;." ^
  --add-data "emir-logo.jpg;." ^
  --add-data "emir-video.mp4;." ^
@@ -75,6 +81,14 @@ echo PREMIUM EXE klasoru olusturuluyor...
 if errorlevel 1 (
     echo.
     echo HATA: EXE olusturulamadi.
+    pause
+    exit /b 1
+)
+
+if not exist "dist\ConverteR\_internal\PySide6\Qt6Core.dll" (
+    echo.
+    echo HATA: Qt runtime dosyalari pakete eklenemedi.
+    echo Kurulum olusturmayin; Python ortamini ve PySide6 kurulumunu kontrol edin.
     pause
     exit /b 1
 )

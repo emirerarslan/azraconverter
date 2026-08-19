@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "ConverteR"
-#define MyAppVersion "1.1.14"
+#define MyAppVersion "1.1.17"
 #define MyAppPublisher "ConverteR"
 #define MyAppExeName "ConverteR.exe"
 #define MyAppIcon "converter-new.ico"
@@ -19,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=ConverteR
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=CONVERTER-SETUP-1.1.14
+OutputBaseFilename=CONVERTER-SETUP-1.1.17
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
@@ -71,6 +71,14 @@ const
 var
   FlagImage: TBitmapImage;
   PhotoImage: TBitmapImage;
+
+procedure UpdateHeaderImages;
+begin
+  FlagImage.SetBounds(16, 16, 84, 56);
+  PhotoImage.SetBounds(WizardForm.ClientWidth - 88, 12, 72, 72);
+  FlagImage.BringToFront;
+  PhotoImage.BringToFront;
+end;
 
 procedure PaintPanel(P: TPanel; C: TColor);
 begin
@@ -161,7 +169,7 @@ begin
   PhotoImage.Parent := WizardForm;
   PhotoImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\setup_emir_photo.bmp'));
   PhotoImage.Stretch := True;
-  PhotoImage.SetBounds(WizardForm.ClientWidth - 88, 12, 72, 72);
+  UpdateHeaderImages;
 
   WizardForm.WelcomeLabel1.Font.Name := 'Segoe UI';
   WizardForm.WelcomeLabel1.Font.Size := 21;
@@ -196,6 +204,7 @@ begin
   WizardForm.StatusLabel.Font.Color := MUTED;
 
   StyleAllControls(WizardForm);
+  UpdateHeaderImages;
 
   WizardForm.NextButton.Caption := 'İLERİ  ›';
   WizardForm.BackButton.Caption := '‹  GERİ';
@@ -214,4 +223,5 @@ begin
   WizardForm.Color := BG;
   WizardForm.MainPanel.Color := BG;
   StyleAllControls(WizardForm);
+  UpdateHeaderImages;
 end;
