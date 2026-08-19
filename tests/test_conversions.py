@@ -30,7 +30,7 @@ def _install_pyside_stubs():
     core.Qt = types.SimpleNamespace()
     core.QObject = _DummyWidget
     core.Signal = lambda *_args, **_kwargs: _DummySignal()
-    core.QThread = core.QTimer = core.QSettings = core.QUrl = _DummyWidget
+    core.QThread = core.QTimer = core.QSettings = core.QUrl = core.QSize = _DummyWidget
     for name in ("QFont", "QIcon", "QPixmap", "QPainter", "QPainterPath", "QColor", "QPen"):
         setattr(gui, name, _DummyWidget)
     for name in (
@@ -227,6 +227,30 @@ class ConversionTests(unittest.TestCase):
                 word_output = main.pdf_to_word(source, progress)
             converted = Document(word_output)
             self.assertIn("Product", "\n".join(p.text for p in converted.paragraphs))
+
+    def test_pdf_excel_page_mode_can_merge_or_split_pages(self):
+        from openpyxl import load_workbook
+        from reportlab.pdfgen import canvas
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            source = folder / "two-pages.pdf"
+            pdf = canvas.Canvas(str(source))
+            pdf.drawString(72, 760, "Gold | 1250")
+            pdf.showPage()
+            pdf.drawString(72, 760, "Silver | 750")
+            pdf.save()
+
+            split_output = main.pdf_to_excel(source, Progress(), separate_pages=True)
+            split_workbook = load_workbook(split_output)
+            self.assertEqual(split_workbook.sheetnames, ["Sayfa 1", "Sayfa 2"])
+
+            merged_output = main.pdf_to_excel(source, Progress(), separate_pages=False)
+            merged_workbook = load_workbook(merged_output)
+            self.assertEqual(merged_workbook.sheetnames, ["Veriler"])
+            values = [cell.value for row in merged_workbook.active.iter_rows() for cell in row]
+            self.assertIn("Gold", values)
+            self.assertIn("Silver", values)
 
     def test_pdf_exports_are_valid(self):
         from docx import Document

@@ -745,7 +745,12 @@ def smart_ocr_page(page):
     return rows
 
 
-def pdf_to_excel(src, progress):
+def pdf_to_excel(src, progress, separate_pages=True):
+    """PDF içeriğini Excel'e aktarır.
+
+    ``separate_pages`` kapalı olduğunda PDF sayfalarının satırları tek bir
+    çalışma sayfasında sırayla birleştirilir.
+    """
     import pdfplumber
     src = Path(src)
     out = unique_output(
@@ -757,6 +762,10 @@ def pdf_to_excel(src, progress):
 
     wb = Workbook()
     first_sheet = True
+    combined_sheet = wb.active if not separate_pages else None
+    if combined_sheet is not None:
+        combined_sheet.title = "Veriler"
+    combined_row_index = 1
 
     with pdfplumber.open(str(src)) as pdf:
         total = max(len(pdf.pages), 1)
@@ -765,20 +774,18 @@ def pdf_to_excel(src, progress):
             pdf.pages,
             start=1
         ):
-            ws = (
-                wb.active
-                if first_sheet
-                else wb.create_sheet()
-            )
-
-            ws.title = f"Sayfa {page_no}"
-            first_sheet = False
+            if separate_pages:
+                ws = wb.active if first_sheet else wb.create_sheet()
+                ws.title = f"Sayfa {page_no}"
+                first_sheet = False
+                row_index = 1
+            else:
+                ws = combined_sheet
+                row_index = combined_row_index
 
             tables = page.extract_tables()
 
             if tables:
-                row_index = 1
-
                 for table in tables:
                     for row in table:
                         values = [
@@ -821,10 +828,7 @@ def pdf_to_excel(src, progress):
                             ocr_doc[page_no - 1]
                         )
 
-                for row_index, values in enumerate(
-                    rows,
-                    start=1
-                ):
+                for values in rows:
                     for col_index, value in enumerate(
                         values,
                         start=1
@@ -834,6 +838,7 @@ def pdf_to_excel(src, progress):
                             column=col_index,
                             value=clean_text(value)
                         )
+                    row_index += 1
 
             if ws.max_row:
                 for cell in ws[1]:
@@ -859,6 +864,9 @@ def pdf_to_excel(src, progress):
                     max(max_len + 2, 10),
                     45
                 )
+
+            if not separate_pages:
+                combined_row_index = row_index
 
             progress.emit(
                 int(page_no / total * 100)
@@ -1513,10 +1521,11 @@ class ConverterWorker(QObject):
     progress = Signal(int)
     cancelled = Signal()
 
-    def __init__(self, mode, source):
+    def __init__(self, mode, source, pdf_excel_separate_pages=True):
         super().__init__()
         self.mode = mode
         self.source = source
+        self.pdf_excel_separate_pages = pdf_excel_separate_pages
         self._cancel_event = threading.Event()
 
     def cancel(self):
@@ -1531,7 +1540,10 @@ class ConverterWorker(QObject):
             self.check_cancelled()
             progress = CancellableProgress(self)
             if self.mode == "pdf_excel":
-                result = pdf_to_excel(self.source, progress)
+                result = pdf_to_excel(
+                    self.source, progress,
+                    separate_pages=self.pdf_excel_separate_pages,
+                )
             elif self.mode == "pdf_word":
                 result = pdf_to_word(self.source, progress)
             elif self.mode == "excel_pdf":
@@ -1690,7 +1702,6 @@ class ConversionProgressDialog(QDialog):
         self.setWindowTitle("Dönüştürülüyor")
         self.setModal(True)
         self.setWindowModality(Qt.ApplicationModal)
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setFixedSize(470, 245)
         self.setStyleSheet("""
             QDialog { background: #0F0F10; border: 1px solid #4A3C25; }
@@ -2527,6 +2538,25 @@ class MainWindow(QMainWindow):
         self.target_hint.setWordWrap(True)
         options.addWidget(self.target_hint)
 
+        self.pdf_excel_options = QWidget()
+        pdf_excel_options_layout = QVBoxLayout(self.pdf_excel_options)
+        pdf_excel_options_layout.setContentsMargins(0, 4, 0, 0)
+        pdf_excel_options_layout.setSpacing(5)
+        pdf_excel_label = QLabel("PDF sayfalarını Excel'de")
+        pdf_excel_label.setObjectName("targetLabel")
+        pdf_excel_options_layout.addWidget(pdf_excel_label)
+        self.pdf_excel_page_mode = QComboBox()
+        self.pdf_excel_page_mode.setObjectName("targetFormat")
+        self.pdf_excel_page_mode.addItem(
+            "Ayrı çalışma sayfaları", True
+        )
+        self.pdf_excel_page_mode.addItem(
+            "Tek sayfada birleştir", False
+        )
+        pdf_excel_options_layout.addWidget(self.pdf_excel_page_mode)
+        self.pdf_excel_options.hide()
+        options.addWidget(self.pdf_excel_options)
+
         self.open_output_checkbox = QCheckBox("İşlem bitince çıktı klasörünü otomatik aç")
         self.open_output_checkbox.setObjectName("outputOption")
         options.addWidget(self.open_output_checkbox)
@@ -3131,6 +3161,7 @@ class MainWindow(QMainWindow):
     def _target_format_changed(self):
         option = self.target_format.currentData()
         self.target_hint.setText(option[2] if option else "")
+        self.pdf_excel_options.setVisible(bool(option and option[0] == "pdf_excel"))
 
     def update_buttons(self):
         options = self._conversion_options_for_file()
@@ -3182,7 +3213,11 @@ class MainWindow(QMainWindow):
         self.convert_button.setEnabled(False)
 
         self.thread = QThread()
-        self.worker = ConverterWorker(mode, self.source_file)
+        self.worker = ConverterWorker(
+            mode,
+            self.source_file,
+            pdf_excel_separate_pages=bool(self.pdf_excel_page_mode.currentData()),
+        )
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.progress.connect(self.progress.setValue)
@@ -3228,14 +3263,14 @@ class MainWindow(QMainWindow):
         box.setIcon(QMessageBox.Information)
         box.setText("DÖNÜŞTÜRME TAMAMLANDI")
         box.setInformativeText(
-            f"Dosya başarıyla oluşturuldu:\n\n{Path(output).name}\n\n"
+            f"Dosya oluşturuldu: {Path(output).name}\n"
             "Çıktı klasörünü açmak ister misiniz?"
         )
         box.setStyleSheet("""
             QMessageBox { background: #0F0F10; }
             QMessageBox QLabel {
                 color: #D6B16B; font-size: 13px;
-                min-width: 430px; padding: 4px;
+                min-width: 320px; padding: 0;
             }
             QMessageBox QPushButton {
                 background: #1B1916; color: #D6B16B;
