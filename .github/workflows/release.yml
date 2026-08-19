@@ -54,7 +54,7 @@ jobs:
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Copy-Item -LiteralPath update_config.json -Destination "dist\AZRA CONVERTER\update_config.json" -Force
-          Copy-Item -LiteralPath azra.ico -Destination "dist\AZRA CONVERTER\azra.ico" -Force
+          Copy-Item -LiteralPath converter.ico -Destination "dist\AZRA CONVERTER\converter.ico" -Force
           Compress-Archive -Path "dist\AZRA CONVERTER\*" `
             -DestinationPath "release\AZRA-CONVERTER-UPDATE-$version.zip" `
             -CompressionLevel Optimal -Force
@@ -116,7 +116,7 @@ jobs:
             distribution_sha256 = $distributionSha256
             # Keep release metadata ASCII-only: Windows PowerShell can otherwise
             # pass non-ASCII CLI arguments through the active console code page.
-            notes = "Azra, Rafine and Emir modes added with persistent themes, runtime icons and Emir video playback."
+            notes = "A fixed application icon and a one-time premium theme selection screen were added."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
@@ -139,7 +139,7 @@ jobs:
             "release/version.json",
             "release/checksums.sha256"
           )
-          $notes = "Azra, Rafine and Emir modes added with persistent themes, runtime icons and Emir video playback."
+          $notes = "A fixed application icon and a one-time premium theme selection screen were added."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
             cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"

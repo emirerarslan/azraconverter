@@ -4,10 +4,10 @@
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.1.12"
+#define MyAppVersion "1.1.13"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
-#define MyAppIcon "azra.ico"
+#define MyAppIcon "converter.ico"
 
 [Setup]
 AppId={{B8A6F4D1-7B35-4E2A-9B71-AZRA2026CONV}
@@ -19,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.12
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.13
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
@@ -46,7 +46,7 @@ Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; GroupDescript
 Source: "dist\AZRA CONVERTER\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; ICO dosyasını ayrıca garanti altına alıyoruz.
-Source: "azra.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "converter.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Kısayol doğrudan kurulum klasöründeki ICO'yu kullanır.

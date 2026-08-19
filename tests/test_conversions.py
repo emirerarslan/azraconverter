@@ -39,6 +39,7 @@ def _install_pyside_stubs():
         "QFrame", "QProgressBar", "QSizePolicy", "QSpacerItem", "QDialog",
         "QScrollArea", "QTableWidget", "QTableWidgetItem",
         "QComboBox", "QCheckBox", "QButtonGroup", "QLayout",
+        "QGraphicsDropShadowEffect",
     ):
         setattr(widgets, name, _DummyWidget)
     multimedia.QAudioOutput = multimedia.QMediaPlayer = _DummyWidget

@@ -28,14 +28,16 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QFrame,
     QProgressBar, QSizePolicy, QSpacerItem, QDialog, QScrollArea,
-    QTableWidget, QTableWidgetItem, QComboBox, QCheckBox, QButtonGroup, QLayout
+    QTableWidget, QTableWidgetItem, QComboBox, QCheckBox, QButtonGroup, QLayout,
+    QGraphicsDropShadowEffect
 )
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.12"
+APP_VERSION = "1.1.13"
+APP_ICON_FILE = "converter.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -58,34 +60,29 @@ SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | WORD_EXTENSIONS | SPREADSHEET_EXTENSIONS
 # Tema varlıkları tek noktada tanımlanır. İlk eşleşen dosya kullanıldığı için
 # kaynak klasörü ve paketlenmiş uygulama aynı kurallarla çalışır.
 THEME_ASSET_CANDIDATES = {
+    "app_icon": (APP_ICON_FILE,),
     "azra_logo": ("azra-logo.png", "azra_gold_logo_real_transparent.png"),
-    "azra_icon": ("azra.ico", "azra_gold.ico"),
     "rafine_logo": ("rafine-logo.jpg", "rafine-logo.png"),
-    "rafine_icon": ("rafine.ico",),
     "emir_photo": ("emir-foto.png", "emir-foto.jpg", "emir-logo.jpg"),
     "emir_video": ("emir-video.mp4", "emir-video.mov", "emir-video.avi"),
     "emir_star": ("emir-yıldız.png", "emir-yildiz.png", "emir-yıldız.jpg"),
-    "emir_icon": ("emir.ico",),
 }
 
 THEME_CONFIGS = {
     "azra": {
         "name": "Azra Mod",
         "logo": "azra_logo",
-        "icon": "azra_icon",
         "glow": QColor(235, 196, 111, 225),
         "halo": QColor(214, 177, 107, 50),
     },
     "rafine": {
         "name": "Rafine Mod",
         "logo": "rafine_logo",
-        "icon": "rafine_icon",
         "glow": QColor(47, 196, 176, 225),
         "halo": QColor(47, 196, 176, 52),
     },
     "emir": {
         "name": "Emir Mod",
-        "icon": "emir_icon",
         "glow": QColor(210, 48, 62, 230),
         "halo": QColor(210, 48, 62, 58),
     },
@@ -1820,6 +1817,136 @@ class ConversionCard(QFrame):
         )
 
 
+class FirstRunThemeDialog(QDialog):
+    """Yeni kurulumda bir kez gösterilen, karanlık tema seçim ekranı."""
+
+    OPTIONS = (
+        ("azra", "AZRA MOD", "Altın  •  Koyu  •  Premium", "#E8C56F", "#FFF0B5", "#241E10"),
+        ("rafine", "RAFİNE MOD", "Finans  •  Modern  •  Profesyonel", "#35D5C0", "#8DFFF0", "#0C2927"),
+        ("emir", "EMİR MOD", "Güçlü  •  Koyu  •  Türk kırmızısı", "#E43C50", "#FF8794", "#321017"),
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.selected_theme = None
+        self.setWindowTitle("Azra Converter — Tema Seçimi")
+        self.setModal(True)
+        self.setMinimumSize(650, 500)
+        self.resize(760, 570)
+
+        icon_path = theme_asset_path("app_icon")
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
+
+        self.setStyleSheet("""
+            QDialog {
+                background: #07080A;
+                color: #F8F4EA;
+                font-family: "Palatino Linotype", Palatino, serif;
+            }
+            QLabel#onboardingBrand {
+                color: #C9A95D;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 3px;
+            }
+            QLabel#onboardingTitle {
+                color: #FFFDF7;
+                font-size: 27px;
+                font-weight: 700;
+            }
+            QLabel#onboardingText {
+                color: #AAA7A1;
+                font-family: "Segoe UI";
+                font-size: 12px;
+            }
+            QLabel#onboardingNote {
+                background: #0E1014;
+                color: #BEBBB4;
+                border: 1px solid #282B31;
+                border-radius: 8px;
+                padding: 10px 14px;
+                font-family: "Segoe UI";
+                font-size: 11px;
+            }
+            QFrame#onboardingLine {
+                background: #B8974E;
+                border: none;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(52, 38, 52, 34)
+        layout.setSpacing(13)
+
+        brand = QLabel("AZRA  GOLD  CONVERTER")
+        brand.setObjectName("onboardingBrand")
+        brand.setAlignment(Qt.AlignCenter)
+        layout.addWidget(brand)
+
+        title = QLabel("Hangi temayı seçmek istiyorsunuz?")
+        title.setObjectName("onboardingTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        text = QLabel("Çalışma alanınız için başlangıç görünümünü belirleyin.")
+        text.setObjectName("onboardingText")
+        text.setAlignment(Qt.AlignCenter)
+        layout.addWidget(text)
+
+        line = QFrame()
+        line.setObjectName("onboardingLine")
+        line.setFixedHeight(2)
+        layout.addWidget(line)
+        layout.addSpacing(5)
+
+        for key, name, description, accent, bright, hover in self.OPTIONS:
+            button = QPushButton(f"{name}     —     {description}")
+            button.setCursor(Qt.PointingHandCursor)
+            button.setMinimumHeight(70)
+            button.setStyleSheet(f"""
+                QPushButton {{
+                    background: #101216;
+                    color: #F8F6F0;
+                    border: 1px solid {accent};
+                    border-left: 7px solid {accent};
+                    border-radius: 10px;
+                    padding: 12px 24px;
+                    text-align: left;
+                    font-family: "Palatino Linotype", Palatino, serif;
+                    font-size: 14px;
+                    font-weight: 700;
+                }}
+                QPushButton:hover {{
+                    background: {hover};
+                    color: #FFFFFF;
+                    border: 2px solid {bright};
+                    border-left: 8px solid {bright};
+                }}
+                QPushButton:pressed {{
+                    background: #050607;
+                }}
+            """)
+            glow = QGraphicsDropShadowEffect(button)
+            glow.setBlurRadius(23)
+            glow.setOffset(0, 0)
+            glow.setColor(QColor(accent))
+            button.setGraphicsEffect(glow)
+            button.clicked.connect(lambda _checked=False, mode=key: self._choose(mode))
+            layout.addWidget(button)
+
+        layout.addStretch(1)
+        note = QLabel("NOT  —  Seçtiğiniz tema daha sonra sol menüdeki Modlar bölümünden değiştirilebilir.")
+        note.setObjectName("onboardingNote")
+        note.setAlignment(Qt.AlignCenter)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+    def _choose(self, mode_key):
+        self.selected_theme = mode_key
+        self.accept()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1831,7 +1958,6 @@ class MainWindow(QMainWindow):
         self._active_mode = None
         self.current_page = "converter"
         self.active_theme = None
-        self._theme_icon = QIcon()
 
         self.setWindowTitle(APP_NAME)
         # İçerik kaydırılabildiğinden pencere daha küçük boyutlarda da
@@ -1844,7 +1970,7 @@ class MainWindow(QMainWindow):
         else:
             self.resize(1200, 780)
 
-        icon_path = theme_asset_path("azra_icon")
+        icon_path = theme_asset_path("app_icon")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -2496,11 +2622,6 @@ class MainWindow(QMainWindow):
             self.brand_logo.clear()
             self.brand_logo.hide()
 
-        icon_path = theme_asset_path(config["icon"])
-        self._theme_icon = QIcon(icon_path) if icon_path else QIcon()
-        self.setWindowIcon(self._theme_icon)
-        QApplication.instance().setWindowIcon(self._theme_icon)
-
         if mode_key == "emir":
             self._start_emir_media()
 
@@ -3146,12 +3267,30 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    icon_path = theme_asset_path("azra_icon")
+    app.setOrganizationName("Azra Gold")
+    icon_path = theme_asset_path("app_icon")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
     font = QFont("Segoe UI", 10)
     app.setFont(font)
+
+    settings = QSettings("Azra Gold", "Azra Converter")
+    saved_theme = settings.value("active_theme", "")
+    onboarding_complete = settings.value("theme_onboarding_complete", False, type=bool)
+
+    if saved_theme in THEME_CONFIGS:
+        # Önceki sürümlerden gelen geçerli tema kaydı da tamamlanmış seçimdir.
+        settings.setValue("theme_onboarding_complete", True)
+    elif onboarding_complete:
+        settings.setValue("active_theme", "azra")
+    else:
+        chooser = FirstRunThemeDialog()
+        if chooser.exec() != QDialog.DialogCode.Accepted or chooser.selected_theme not in THEME_CONFIGS:
+            return
+        settings.setValue("active_theme", chooser.selected_theme)
+        settings.setValue("theme_onboarding_complete", True)
+    settings.sync()
 
     window = MainWindow()
     window.show()

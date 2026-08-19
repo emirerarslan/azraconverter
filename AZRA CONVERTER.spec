@@ -6,9 +6,8 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('azra.ico', '.'),
+        ('converter.ico', '.'),
         ('azra-logo.png', '.'),
-        ('rafine.ico', '.'),
         ('rafine-logo.jpg', '.'),
         ('emir-logo.jpg', '.'),
         ('emir-video.mp4', '.'),
@@ -42,7 +41,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['azra.ico'],
+    icon=['converter.ico'],
 )
 coll = COLLECT(
     exe,
