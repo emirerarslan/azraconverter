@@ -46,19 +46,7 @@ jobs:
 
       - name: Build application
         shell: powershell
-        run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed `
-            --name "AZRA CONVERTER" `
-            --icon "azra.ico" `
-            --add-data "azra.ico;." `
-            --add-data "azra-logo.png;." `
-            --add-data "rafine.ico;." `
-            --add-data "rafine-logo.jpg;." `
-            --add-data "emir-logo.jpg;." `
-            --add-data "emir-video.mp4;." `
-            --add-data "emir-yıldız.png;." `
-            --add-data "C:\Program Files\Tesseract-OCR;tesseract" `
-            main.py
+        run: python -m PyInstaller --noconfirm --clean "AZRA CONVERTER.spec"
 
       - name: Create in-app update package
         shell: powershell
