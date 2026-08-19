@@ -53,10 +53,10 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item -LiteralPath update_config.json -Destination "dist\AZRA CONVERTER\update_config.json" -Force
-          Copy-Item -LiteralPath converter.ico -Destination "dist\AZRA CONVERTER\converter.ico" -Force
-          Compress-Archive -Path "dist\AZRA CONVERTER\*" `
-            -DestinationPath "release\AZRA-CONVERTER-UPDATE-$version.zip" `
+          Copy-Item -LiteralPath update_config.json -Destination "dist\ConverteR\update_config.json" -Force
+          Copy-Item -LiteralPath converter-new.ico -Destination "dist\ConverteR\converter-new.ico" -Force
+          Compress-Archive -Path "dist\ConverteR\*" `
+            -DestinationPath "release\CONVERTER-UPDATE-$version.zip" `
             -CompressionLevel Optimal -Force
 
       - name: Build installer
@@ -66,7 +66,7 @@ jobs:
           $scriptPath = "setup_azra_premium_v2_fixed_1.0.2.iss"
           $script = Get-Content -Raw -Encoding utf8 -LiteralPath $scriptPath
           $script = $script -replace '#define MyAppVersion "[^"]+"', "#define MyAppVersion `"$version`""
-          $script = $script -replace 'OutputBaseFilename=AZRA-CONVERTER-SETUP-[^\r\n]+', "OutputBaseFilename=AZRA-CONVERTER-SETUP-$version"
+          $script = $script -replace 'OutputBaseFilename=CONVERTER-SETUP-[^\r\n]+', "OutputBaseFilename=CONVERTER-SETUP-$version"
           Set-Content -LiteralPath $scriptPath -Value $script -Encoding utf8
 
           $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
@@ -82,9 +82,9 @@ jobs:
         shell: powershell
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
-          $installer = "installer/AZRA-CONVERTER-SETUP-$version.exe"
-          $package = "release/AZRA-CONVERTER-UPDATE-$version.zip"
-          $distribution = "release/AZRA-CONVERTER-$version-DAGITIM.rar"
+          $installer = "installer/CONVERTER-SETUP-$version.exe"
+          $package = "release/CONVERTER-UPDATE-$version.zip"
+          $distribution = "release/CONVERTER-$version-DAGITIM.rar"
           if (-not (Test-Path -LiteralPath $installer)) {
             throw "Installer was not produced: $installer"
           }
@@ -106,13 +106,13 @@ jobs:
 
           $manifest = [ordered]@{
             version = $version
-            download_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-SETUP-$version.exe"
+            download_url = "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-$version.exe"
             sha256 = $sha256
             # Existing clients use the installer for the transition away from
             # robocopy-based in-place updates. The ZIP remains a release asset.
             package_url = ""
             package_sha256 = ""
-            distribution_url = "https://github.com/emirerarslan/azraconverter/releases/latest/download/AZRA-CONVERTER-$version-DAGITIM.rar"
+            distribution_url = "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-$version-DAGITIM.rar"
             distribution_sha256 = $distributionSha256
             # Keep release metadata ASCII-only: Windows PowerShell can otherwise
             # pass non-ASCII CLI arguments through the active console code page.
@@ -120,9 +120,9 @@ jobs:
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
-            "$sha256  AZRA-CONVERTER-SETUP-$version.exe"
-            "$packageSha256  AZRA-CONVERTER-UPDATE-$version.zip"
-            "$distributionSha256  AZRA-CONVERTER-$version-DAGITIM.rar"
+            "$sha256  CONVERTER-SETUP-$version.exe"
+            "$packageSha256  CONVERTER-UPDATE-$version.zip"
+            "$distributionSha256  CONVERTER-$version-DAGITIM.rar"
           ) | Set-Content -LiteralPath release/checksums.sha256 -Encoding ascii
 
       - name: Publish GitHub release
@@ -133,9 +133,9 @@ jobs:
           $OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           $files = @(
-            "installer/AZRA-CONVERTER-SETUP-$version.exe",
-            "release/AZRA-CONVERTER-UPDATE-$version.zip",
-            "release/AZRA-CONVERTER-$version-DAGITIM.rar",
+            "installer/CONVERTER-SETUP-$version.exe",
+            "release/CONVERTER-UPDATE-$version.zip",
+            "release/CONVERTER-$version-DAGITIM.rar",
             "release/version.json",
             "release/checksums.sha256"
           )

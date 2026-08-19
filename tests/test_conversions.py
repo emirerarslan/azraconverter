@@ -129,7 +129,7 @@ class ConversionTests(unittest.TestCase):
             folder = Path(folder)
             package = folder / "update.zip"
             with zipfile.ZipFile(package, "w") as archive:
-                archive.writestr("AZRA CONVERTER.exe", b"binary")
+                archive.writestr("ConverteR.exe", b"binary")
                 archive.writestr("_internal/library.dll", b"library")
             app_folder = main.extract_update_package(package, folder / "staging")
             self.assertEqual(app_folder, (folder / "staging").resolve())
@@ -141,7 +141,7 @@ class ConversionTests(unittest.TestCase):
             package = folder / "unsafe.zip"
             with zipfile.ZipFile(package, "w") as archive:
                 archive.writestr("../outside.txt", b"unsafe")
-                archive.writestr("AZRA CONVERTER.exe", b"binary")
+                archive.writestr("ConverteR.exe", b"binary")
             with self.assertRaises(RuntimeError):
                 main.extract_update_package(package, folder / "staging")
 

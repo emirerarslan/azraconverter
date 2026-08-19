@@ -1,8 +1,8 @@
 {
-  "version": "1.1.19",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.1.19/CONVERTER-SETUP-1.1.19.exe",
-  "sha256": "5f7a26684d7215f8327d13507cc355cec99aeec927958d7b5bbcbe091b8b137a",
+  "version": "1.1.20",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.20.exe",
+  "sha256": "",
   "package_url": "",
   "package_sha256": "",
-  "notes": "Hakkında ekranı sadeleştirildi; bayrak ve video görünümü iyileştirildi."
+  "notes": "PDF'den Excel'e aktarımda sayfaları birleştirme veya ayırma seçeneği eklendi."
 }
