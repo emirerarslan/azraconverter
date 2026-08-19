@@ -41,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.21"
+APP_VERSION = "1.1.22"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -3310,19 +3310,74 @@ class MainWindow(QMainWindow):
         self.update_button.setEnabled(True)
 
     def _launch_update_installer(self, installer_path):
+        """Sessiz kurulum boyunca uygulamadan bağımsız ilerleme penceresi gösterir."""
         installer = Path(installer_path)
         app_executable = Path(sys.executable).resolve()
-        helper = Path(tempfile.gettempdir()) / "AzraConverterUpdates" / "install_update.cmd"
+        helper_folder = Path(tempfile.gettempdir()) / "AzraConverterUpdates"
+        helper_folder.mkdir(parents=True, exist_ok=True)
+        helper = helper_folder / "install_update.ps1"
         helper.write_text(
-            "@echo off\r\n"
-            f"powershell -NoProfile -NonInteractive -Command \"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\"\r\n"
-            f"start \"\" /wait \"{installer}\" /SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\r\n"
-            f"start \"\" \"{app_executable}\"\r\n"
-            "del \"%~f0\"\r\n",
-            encoding="utf-8",
+            "$ErrorActionPreference = 'Stop'\r\n"
+            "Add-Type -AssemblyName System.Windows.Forms\r\n"
+            "Add-Type -AssemblyName System.Drawing\r\n"
+            "$form = New-Object System.Windows.Forms.Form\r\n"
+            "$form.Text = 'ConverteR Güncellemesi'\r\n"
+            "$form.Size = New-Object System.Drawing.Size(390, 155)\r\n"
+            "$form.StartPosition = 'CenterScreen'\r\n"
+            "$form.FormBorderStyle = 'FixedDialog'\r\n"
+            "$form.ControlBox = $false\r\n"
+            "$form.TopMost = $true\r\n"
+            "$form.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 19)\r\n"
+            "$form.ForeColor = [System.Drawing.Color]::FromArgb(235, 222, 193)\r\n"
+            "$title = New-Object System.Windows.Forms.Label\r\n"
+            "$title.Text = 'GÜNCELLEME YÜKLENİYOR'\r\n"
+            "$title.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)\r\n"
+            "$title.ForeColor = [System.Drawing.Color]::FromArgb(214, 177, 107)\r\n"
+            "$title.AutoSize = $true\r\n"
+            "$title.Location = New-Object System.Drawing.Point(25, 20)\r\n"
+            "$status = New-Object System.Windows.Forms.Label\r\n"
+            "$status.Text = 'Program hazırlanıyor, lütfen bekleyin...'\r\n"
+            "$status.Font = New-Object System.Drawing.Font('Segoe UI', 9)\r\n"
+            "$status.AutoSize = $true\r\n"
+            "$status.Location = New-Object System.Drawing.Point(26, 53)\r\n"
+            "$bar = New-Object System.Windows.Forms.ProgressBar\r\n"
+            "$bar.Style = 'Marquee'\r\n"
+            "$bar.MarqueeAnimationSpeed = 28\r\n"
+            "$bar.Size = New-Object System.Drawing.Size(335, 18)\r\n"
+            "$bar.Location = New-Object System.Drawing.Point(25, 87)\r\n"
+            "$form.Controls.AddRange(@($title, $status, $bar))\r\n"
+            "$form.Show()\r\n"
+            "[System.Windows.Forms.Application]::DoEvents()\r\n"
+            "try {\r\n"
+            f"  Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\r\n"
+            "  $status.Text = 'Güncelleme kuruluyor, lütfen bekleyin...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
+            f"  $setup = Start-Process -FilePath '{_ps_quote(installer)}' -ArgumentList @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -PassThru -WindowStyle Hidden\r\n"
+            "  while (-not $setup.HasExited) {\r\n"
+            "    [System.Windows.Forms.Application]::DoEvents()\r\n"
+            "    Start-Sleep -Milliseconds 150\r\n"
+            "    $setup.Refresh()\r\n"
+            "  }\r\n"
+            "  if ($setup.ExitCode -ne 0) { throw \"Kurulum tamamlanamadı (kod: $($setup.ExitCode)).\" }\r\n"
+            "  $status.Text = 'Tamamlandı. Program açılıyor...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
+            "  Start-Sleep -Milliseconds 700\r\n"
+            "} catch {\r\n"
+            "  $status.Text = 'Güncelleme tamamlanamadı. Program yeniden açılıyor...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
+            "  Start-Sleep -Milliseconds 1800\r\n"
+            "} finally {\r\n"
+            "  $form.Close()\r\n"
+            f"  Start-Process -FilePath '{_ps_quote(app_executable)}'\r\n"
+            "  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n"
+            "}\r\n",
+            encoding="utf-8-sig",
         )
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        subprocess.Popen(["cmd", "/c", str(helper)], creationflags=creationflags)
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(helper)],
+            creationflags=creationflags,
+        )
         QTimer.singleShot(350, QApplication.instance().quit)
 
     def _launch_in_app_update(self, package_path):
@@ -3343,8 +3398,34 @@ class MainWindow(QMainWindow):
             "$ErrorActionPreference = 'Stop'\r\n"
             f"$resultPath = '{_ps_quote(result_path)}'\r\n"
             f"$version = '{_ps_quote(self._update_version)}'\r\n"
+            "Add-Type -AssemblyName System.Windows.Forms\r\n"
+            "Add-Type -AssemblyName System.Drawing\r\n"
+            "$form = New-Object System.Windows.Forms.Form\r\n"
+            "$form.Text = 'ConverteR Güncellemesi'\r\n"
+            "$form.Size = New-Object System.Drawing.Size(390, 155)\r\n"
+            "$form.StartPosition = 'CenterScreen'\r\n"
+            "$form.FormBorderStyle = 'FixedDialog'\r\n"
+            "$form.ControlBox = $false\r\n"
+            "$form.TopMost = $true\r\n"
+            "$form.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 19)\r\n"
+            "$form.ForeColor = [System.Drawing.Color]::FromArgb(235, 222, 193)\r\n"
+            "$status = New-Object System.Windows.Forms.Label\r\n"
+            "$status.Text = 'Program hazırlanıyor, lütfen bekleyin...'\r\n"
+            "$status.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)\r\n"
+            "$status.AutoSize = $true\r\n"
+            "$status.Location = New-Object System.Drawing.Point(25, 27)\r\n"
+            "$bar = New-Object System.Windows.Forms.ProgressBar\r\n"
+            "$bar.Style = 'Marquee'\r\n"
+            "$bar.MarqueeAnimationSpeed = 28\r\n"
+            "$bar.Size = New-Object System.Drawing.Size(335, 18)\r\n"
+            "$bar.Location = New-Object System.Drawing.Point(25, 72)\r\n"
+            "$form.Controls.AddRange(@($status, $bar))\r\n"
+            "$form.Show()\r\n"
+            "[System.Windows.Forms.Application]::DoEvents()\r\n"
             "try {\r\n"
             f"  Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue\r\n"
+            "  $status.Text = 'Dosyalar güncelleniyor, lütfen bekleyin...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
             f"  $source = '{_ps_quote(staged_app)}'\r\n"
             f"  $target = '{_ps_quote(install_dir)}'\r\n"
             f"  $exe = '{_ps_quote(current_executable)}'\r\n"
@@ -3352,11 +3433,20 @@ class MainWindow(QMainWindow):
             "  $copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden\r\n"
             "  if ($copy.ExitCode -gt 7) { throw \"Dosyalar kopyalanamadı (robocopy: $($copy.ExitCode)).\" }\r\n"
             "  @{status='success'; version=$version; message=''} | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8\r\n"
+            "  $status.Text = 'Tamamlandı. Program açılıyor...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
+            "  Start-Sleep -Milliseconds 700\r\n"
             "  Start-Process -FilePath $exe\r\n"
             f"  Remove-Item -LiteralPath '{_ps_quote(Path(package_path))}' -Force -ErrorAction SilentlyContinue\r\n"
             "  Remove-Item -LiteralPath $source -Recurse -Force -ErrorAction SilentlyContinue\r\n"
             "} catch {\r\n"
             "  @{status='failed'; version=$version; message=$_.Exception.Message} | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8\r\n"
+            "  $status.Text = 'Güncelleme tamamlanamadı. Program açılıyor...'\r\n"
+            "  [System.Windows.Forms.Application]::DoEvents()\r\n"
+            "  Start-Sleep -Milliseconds 1800\r\n"
+            "  Start-Process -FilePath $exe\r\n"
+            "} finally {\r\n"
+            "  $form.Close()\r\n"
             "}\r\n"
             "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n",
             encoding="utf-8-sig",

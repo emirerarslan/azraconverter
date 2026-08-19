@@ -1,8 +1,8 @@
 {
-  "version": "1.1.21",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.21.exe",
+  "version": "1.1.22",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/latest/download/CONVERTER-SETUP-1.1.22.exe",
   "sha256": "",
   "package_url": "",
   "package_sha256": "",
-  "notes": "PDF sayfa silme, Excel uyumluluğu ve tema menüsü iyileştirmeleri eklendi."
+  "notes": "Güncelleme kurulurken bekleme penceresi ve durum bilgisi eklendi."
 }
