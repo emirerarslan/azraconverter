@@ -116,7 +116,7 @@ jobs:
             distribution_sha256 = $distributionSha256
             # Keep release metadata ASCII-only: Windows PowerShell can otherwise
             # pass non-ASCII CLI arguments through the active console code page.
-            notes = "A fixed application icon and a one-time premium theme selection screen were added."
+            notes = "Legacy 1.0 installations are migrated automatically and multimedia startup is resilient."
           }
           $manifest | ConvertTo-Json | Set-Content -LiteralPath release/version.json -Encoding utf8
           @(
@@ -139,7 +139,7 @@ jobs:
             "release/version.json",
             "release/checksums.sha256"
           )
-          $notes = "A fixed application icon and a one-time premium theme selection screen were added."
+          $notes = "Legacy 1.0 installations are migrated automatically and multimedia startup is resilient."
 
           for ($attempt = 1; $attempt -le 4; $attempt++) {
             cmd /d /c "gh release view $env:GITHUB_REF_NAME >nul 2>&1"

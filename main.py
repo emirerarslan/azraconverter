@@ -31,12 +31,17 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QComboBox, QCheckBox, QButtonGroup, QLayout,
     QGraphicsDropShadowEffect
 )
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
+try:
+    from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+    from PySide6.QtMultimediaWidgets import QVideoWidget
+    QT_MULTIMEDIA_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    QAudioOutput = QMediaPlayer = QVideoWidget = None
+    QT_MULTIMEDIA_AVAILABLE = False
 
 
 APP_NAME = "AZRA CONVERTER"
-APP_VERSION = "1.1.13"
+APP_VERSION = "1.1.14"
 APP_ICON_FILE = "converter.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -2332,10 +2337,11 @@ class MainWindow(QMainWindow):
         self.brand_logo.setFixedSize(179, 115)
         side.addWidget(self.brand_logo, 0, Qt.AlignHCenter)
 
-        self.emir_video_widget = QVideoWidget()
+        self.emir_video_widget = QVideoWidget() if QT_MULTIMEDIA_AVAILABLE else QLabel()
         self.emir_video_widget.setObjectName("emirVideo")
         self.emir_video_widget.setFixedSize(179, 82)
-        self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatio)
+        if QT_MULTIMEDIA_AVAILABLE:
+            self.emir_video_widget.setAspectRatioMode(Qt.KeepAspectRatio)
         self.emir_video_widget.setStyleSheet("background: #050505; border: 1px solid #5D252E; border-radius: 7px;")
         self.emir_video_widget.hide()
         side.addWidget(self.emir_video_widget, 0, Qt.AlignHCenter)
@@ -2348,12 +2354,15 @@ class MainWindow(QMainWindow):
         self.emir_photo.hide()
         side.addWidget(self.emir_photo, 0, Qt.AlignHCenter)
 
-        self.emir_audio = QAudioOutput(self)
-        self.emir_audio.setMuted(True)
-        self.emir_player = QMediaPlayer(self)
-        self.emir_player.setAudioOutput(self.emir_audio)
-        self.emir_player.setVideoOutput(self.emir_video_widget)
-        self.emir_player.setLoops(QMediaPlayer.Infinite)
+        self.emir_audio = None
+        self.emir_player = None
+        if QT_MULTIMEDIA_AVAILABLE:
+            self.emir_audio = QAudioOutput(self)
+            self.emir_audio.setMuted(True)
+            self.emir_player = QMediaPlayer(self)
+            self.emir_player.setAudioOutput(self.emir_audio)
+            self.emir_player.setVideoOutput(self.emir_video_widget)
+            self.emir_player.setLoops(QMediaPlayer.Infinite)
 
         side.addSpacing(24)
 
@@ -2573,8 +2582,9 @@ class MainWindow(QMainWindow):
         return True
 
     def _stop_emir_media(self):
-        self.emir_player.stop()
-        self.emir_player.setSource(QUrl())
+        if self.emir_player is not None:
+            self.emir_player.stop()
+            self.emir_player.setSource(QUrl())
         self.emir_video_widget.hide()
         self.emir_photo.hide()
         self.emir_star.hide()
@@ -2589,7 +2599,7 @@ class MainWindow(QMainWindow):
             self.emir_star.show()
 
         video_path = theme_asset_path("emir_video")
-        if video_path:
+        if video_path and self.emir_player is not None:
             self.emir_player.setSource(QUrl.fromLocalFile(video_path))
             self.emir_video_widget.show()
             self.emir_player.play()

@@ -15,7 +15,7 @@ a = Analysis(
         ('update_config.json', '.'),
         ('C:/Program Files/Tesseract-OCR', 'tesseract'),
     ],
-    hiddenimports=[],
+    hiddenimports=['PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

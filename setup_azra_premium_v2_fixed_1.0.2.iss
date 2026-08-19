@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "AZRA CONVERTER"
-#define MyAppVersion "1.1.13"
+#define MyAppVersion "1.1.14"
 #define MyAppPublisher "Azra Gold"
 #define MyAppExeName "AZRA CONVERTER.exe"
 #define MyAppIcon "converter.ico"
@@ -19,7 +19,7 @@ DisableDirPage=yes
 DefaultGroupName=Azra Converter
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.13
+OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.14
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
@@ -119,6 +119,31 @@ begin
     if C is TWinControl then
       StyleAllControls(TWinControl(C));
   end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  OldUninstaller: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  OldUninstaller := ExpandConstant('{pf}\Azra Converter\unins000.exe');
+
+  { Eski 1.0 kurulumu farklı AppId ve klasör kullandığı için yeni sürümün
+    yanında kalabiliyordu. Yeni dosyalar kurulmadan önce sessizce kaldır. }
+  if FileExists(OldUninstaller) then
+  begin
+    if not Exec(OldUninstaller,
+      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode) then
+      Log('Eski Azra Converter kaldırıcısı başlatılamadı.')
+    else if ResultCode <> 0 then
+      Log(Format('Eski Azra Converter kaldırıcısı %d koduyla tamamlandı.', [ResultCode]));
+  end;
+
+  DeleteFile(ExpandConstant('{commonprograms}\AZRA CONVERTER\AZRA CONVERTER.lnk'));
+  RemoveDir(ExpandConstant('{commonprograms}\AZRA CONVERTER'));
+  DeleteFile(ExpandConstant('{commondesktop}\AZRA CONVERTER.lnk'));
 end;
 
 procedure InitializeWizard;
