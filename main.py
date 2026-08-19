@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 OCR_AVAILABLE = None
 _PDF_FONTS = None
 
-from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl
+from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl, QSize
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -41,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.17"
+APP_VERSION = "1.1.18"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -2570,17 +2570,23 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _set_scaled_pixmap(label, path):
+        """Pikselleri Windows ekran ölçeklemesine göre üretir."""
         pixmap = QPixmap(path) if path else QPixmap()
         if pixmap.isNull():
             label.clear()
             return False
-        label.setPixmap(
-            pixmap.scaled(
-                label.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
+        ratio = label.devicePixelRatioF()
+        pixel_size = QSize(
+            round(label.width() * ratio),
+            round(label.height() * ratio),
         )
+        scaled = pixmap.scaled(
+            pixel_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        scaled.setDevicePixelRatio(ratio)
+        label.setPixmap(scaled)
         return True
 
     def _stop_emir_media(self):
@@ -2990,16 +2996,14 @@ class MainWindow(QMainWindow):
 
         flag = QLabel()
         flag.setAlignment(Qt.AlignCenter)
-        flag_pix = QPixmap(theme_asset_path("turkish_flag"))
-        if not flag_pix.isNull():
-            flag.setPixmap(flag_pix.scaled(180, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        flag.setFixedSize(180, 96)
+        self._set_scaled_pixmap(flag, theme_asset_path("turkish_flag"))
         identity_layout.addWidget(flag)
 
         photo = QLabel()
         photo.setAlignment(Qt.AlignCenter)
-        photo_pix = QPixmap(theme_asset_path("emir_photo"))
-        if not photo_pix.isNull():
-            photo.setPixmap(photo_pix.scaled(62, 82, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        photo.setFixedSize(62, 82)
+        self._set_scaled_pixmap(photo, theme_asset_path("emir_photo"))
         identity_layout.addWidget(photo)
         layout.addWidget(identity)
 

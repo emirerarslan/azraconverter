@@ -1,8 +1,8 @@
 {
-  "version": "1.1.17",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.1.17/CONVERTER-SETUP-1.1.17.exe",
-  "sha256": "b845f7a8861c3b1d62c608bb2f9581b3c0de5d6d1001508ad1eeb82566ee5eb9",
+  "version": "1.1.18",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.1.18/CONVERTER-SETUP-1.1.18.exe",
+  "sha256": "fb87d22ff6acca6641c8e05b55cf1d6d5de0636d4d36f7bba78504a172e7560a",
   "package_url": "",
   "package_sha256": "",
-  "notes": "Türk bayrağı videosu ve Hakkında ekranı yenilendi."
+  "notes": "Emir fotoğrafı yüksek DPI ekranlarda daha net gösteriliyor."
 }
