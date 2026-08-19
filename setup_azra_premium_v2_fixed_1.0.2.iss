@@ -1,38 +1,38 @@
 #pragma codepage "utf-8"
 ; ============================================================
-; AZRA CONVERTER - PREMIUM DARK / GOLD SETUP
+; CONVERTER - BLACK / GOLD SETUP
 ; ============================================================
 
-#define MyAppName "AZRA CONVERTER"
+#define MyAppName "ConverteR"
 #define MyAppVersion "1.1.14"
-#define MyAppPublisher "Azra Gold"
-#define MyAppExeName "AZRA CONVERTER.exe"
-#define MyAppIcon "converter.ico"
+#define MyAppPublisher "ConverteR"
+#define MyAppExeName "ConverteR.exe"
+#define MyAppIcon "converter-new.ico"
 
 [Setup]
 AppId={{B8A6F4D1-7B35-4E2A-9B71-AZRA2026CONV}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\Azra Gold\Azra Converter
+DefaultDirName={autopf}\ConverteR
 DisableDirPage=yes
-DefaultGroupName=Azra Converter
+DefaultGroupName=ConverteR
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=AZRA-CONVERTER-SETUP-1.1.14
+OutputBaseFilename=CONVERTER-SETUP-1.1.14
 SetupIconFile={#MyAppIcon}
 UninstallDisplayIcon={app}\{#MyAppIcon}
 WizardStyle=modern
-WizardImageFile=azra_setup.bmp
-WizardSmallImageFile=azra_setup_small.bmp
+WizardImageFile=setup_black.bmp
+WizardSmallImageFile=setup_black_small.bmp
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 Uninstallable=yes
-VersionInfoCompany=Azra Gold
-VersionInfoDescription=Azra Converter Kurulum
-VersionInfoProductName=Azra Converter
+VersionInfoCompany=ConverteR
+VersionInfoDescription=ConverteR Kurulum
+VersionInfoProductName=ConverteR
 VersionInfoProductVersion={#MyAppVersion}
 
 [Languages]
@@ -43,31 +43,37 @@ Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; GroupDescript
 
 [Files]
 ; EXE ve tüm runtime dosyaları
-Source: "dist\AZRA CONVERTER\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\ConverteR\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Güncelleme denetiminin GitHub adresi, program klasöründe düzenlenebilir kalır.
 Source: "update_config.json"; DestDir: "{app}"; Flags: ignoreversion
 
 ; ICO dosyasını ayrıca garanti altına alıyoruz.
-Source: "converter.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "converter-new.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "setup_flag.bmp"; Flags: dontcopy
+Source: "setup_emir_photo.bmp"; Flags: dontcopy
 
 [Icons]
 ; Kısayol doğrudan kurulum klasöründeki ICO'yu kullanır.
-Name: "{autodesktop}\Azra Converter"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcon}"; Tasks: desktopicon
-Name: "{autoprograms}\Azra Converter"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcon}"
+Name: "{autodesktop}\ConverteR"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcon}"; Tasks: desktopicon
+Name: "{autoprograms}\ConverteR"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcon}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Azra Converter'ı şimdi çalıştır"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "ConverteR'ı şimdi çalıştır"; Flags: nowait postinstall skipifsilent
 
 [Code]
 const
   BG        = $000B0B0B;
-  PANEL     = $00131313;
-  PANEL2    = $001B1A18;
+  PANEL     = $00000000;
+  PANEL2    = $00000000;
   GOLD      = $0068B5D8;
   GOLD2     = $00A8D9F2;
-  TEXT      = $00FFFDF8;
-  MUTED     = $00B9B2A8;
+  TEXT      = $00A8D9F2;
+  MUTED     = $0068B5D8;
+
+var
+  FlagImage: TBitmapImage;
+  PhotoImage: TBitmapImage;
 
 procedure PaintPanel(P: TPanel; C: TColor);
 begin
@@ -148,11 +154,26 @@ end;
 
 procedure InitializeWizard;
 begin
+  ExtractTemporaryFile('setup_flag.bmp');
+  ExtractTemporaryFile('setup_emir_photo.bmp');
+
   WizardForm.Color := BG;
   WizardForm.Font.Name := 'Segoe UI';
   WizardForm.Font.Color := TEXT;
   WizardForm.MainPanel.Color := BG;
   WizardForm.MainPanel.ParentBackground := False;
+
+  FlagImage := TBitmapImage.Create(WizardForm);
+  FlagImage.Parent := WizardForm;
+  FlagImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\setup_flag.bmp'));
+  FlagImage.Stretch := True;
+  FlagImage.SetBounds(16, 16, 84, 56);
+
+  PhotoImage := TBitmapImage.Create(WizardForm);
+  PhotoImage.Parent := WizardForm;
+  PhotoImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\setup_emir_photo.bmp'));
+  PhotoImage.Stretch := True;
+  PhotoImage.SetBounds(WizardForm.ClientWidth - 88, 12, 72, 72);
 
   WizardForm.WelcomeLabel1.Font.Name := 'Segoe UI';
   WizardForm.WelcomeLabel1.Font.Size := 21;

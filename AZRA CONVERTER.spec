@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('converter.ico', '.'),
+        ('converter-new.ico', '.'),
         ('azra-logo.png', '.'),
         ('rafine-logo.jpg', '.'),
         ('emir-logo.jpg', '.'),
@@ -30,7 +30,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AZRA CONVERTER',
+    name='ConverteR',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -41,7 +41,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['converter.ico'],
+    icon=['converter-new.ico'],
 )
 coll = COLLECT(
     exe,
@@ -50,5 +50,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AZRA CONVERTER',
+    name='ConverteR',
 )

@@ -40,9 +40,9 @@ except (ImportError, ModuleNotFoundError):
     QT_MULTIMEDIA_AVAILABLE = False
 
 
-APP_NAME = "AZRA CONVERTER"
+APP_NAME = "ConverteR"
 APP_VERSION = "1.1.14"
-APP_ICON_FILE = "converter.ico"
+APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
     "https://github.com/emirerarslan/azraconverter/releases/latest/download/version.json",
@@ -275,7 +275,7 @@ def extract_update_package(package_path, destination):
                 raise RuntimeError("Güncelleme paketi hedef klasör dışına çıkıyor.")
         archive.extractall(destination)
 
-    executable = next(destination.rglob("AZRA CONVERTER.exe"), None)
+    executable = next(destination.rglob(f"{APP_NAME}.exe"), None)
     if executable is None:
         raise RuntimeError("Güncelleme paketinde uygulama dosyası bulunamadı.")
     return executable.parent
@@ -1834,7 +1834,7 @@ class FirstRunThemeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_theme = None
-        self.setWindowTitle("Azra Converter — Tema Seçimi")
+        self.setWindowTitle(f"{APP_NAME} — Tema Seçimi")
         self.setModal(True)
         self.setMinimumSize(650, 500)
         self.resize(760, 570)
@@ -1884,7 +1884,7 @@ class FirstRunThemeDialog(QDialog):
         layout.setContentsMargins(52, 38, 52, 34)
         layout.setSpacing(13)
 
-        brand = QLabel("AZRA  GOLD  CONVERTER")
+        brand = QLabel("CONVERTER")
         brand.setObjectName("onboardingBrand")
         brand.setAlignment(Qt.AlignCenter)
         layout.addWidget(brand)
@@ -1968,7 +1968,7 @@ class MainWindow(QMainWindow):
         # İçerik kaydırılabildiğinden pencere daha küçük boyutlarda da
         # kullanılabilir. Son kullanılan boyut ve konum sonraki açılışta korunur.
         self.setMinimumSize(640, 480)
-        self._window_settings = QSettings("Azra Gold", "Azra Converter")
+        self._window_settings = QSettings(APP_NAME, APP_NAME)
         saved_geometry = self._window_settings.value("window_geometry")
         if saved_geometry:
             self.restoreGeometry(saved_geometry)
@@ -2411,7 +2411,7 @@ class MainWindow(QMainWindow):
         mode_layout.addWidget(self.mode_options)
         side.addWidget(mode_panel)
 
-        version = QLabel(f"Azra Converter\nv{APP_VERSION}")
+        version = QLabel(f"{APP_NAME}\nv{APP_VERSION}")
         version.setObjectName("version")
         version.setAlignment(Qt.AlignCenter)
         side.addWidget(version)
@@ -2445,7 +2445,7 @@ class MainWindow(QMainWindow):
         heading = QVBoxLayout()
         heading.setSpacing(4)
 
-        eyebrow = QLabel("AZRA GOLD  |  DOCUMENT TOOLS")
+        eyebrow = QLabel("DOCUMENT TOOLS")
         eyebrow.setObjectName("eyebrow")
         heading.addWidget(eyebrow)
 
@@ -2646,7 +2646,7 @@ class MainWindow(QMainWindow):
         result = consume_update_result()
         if result.get("status") == "success":
             version = clean_text(result.get("version")) or APP_VERSION
-            QMessageBox.information(self, "Güncelleme tamamlandı", f"Azra Converter v{version} başarıyla yüklendi.")
+            QMessageBox.information(self, "Güncelleme tamamlandı", f"{APP_NAME} v{version} başarıyla yüklendi.")
         elif result.get("status") == "failed":
             detail = clean_text(result.get("message")) or "Bilinmeyen hata"
             QMessageBox.warning(
@@ -2750,7 +2750,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        dialog = self._dark_dialog("Azra Converter - Geçmiş", 820, 500)
+        dialog = self._dark_dialog(f"{APP_NAME} - Geçmiş", 820, 500)
         self._history_dialog = dialog
         dialog.finished.connect(lambda _=0: self._history_dialog_closed())
 
@@ -2975,7 +2975,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         self._select_nav(self.nav_about)
 
-        dialog = self._dark_dialog("Azra Converter Hakkında", 620, 640)
+        dialog = self._dark_dialog(f"{APP_NAME} Hakkında", 620, 640)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(34, 28, 34, 24)
         layout.setSpacing(9)
@@ -2987,14 +2987,14 @@ class MainWindow(QMainWindow):
             logo.setPixmap(pix.scaled(220, 145, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(logo)
 
-        brand = QLabel("AZRA GOLD")
+        brand = QLabel("CONVERTER")
         brand.setAlignment(Qt.AlignCenter)
         brand.setStyleSheet(
             "color:#D6B16B; font-size:14px; font-weight:800; letter-spacing:2px;"
         )
         layout.addWidget(brand)
 
-        title = QLabel("AZRA CONVERTER")
+        title = QLabel(APP_NAME)
         title.setObjectName("dialogTitle")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
@@ -3062,7 +3062,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(signature)
 
-        signature_sub = QLabel("Azra Converter")
+        signature_sub = QLabel(APP_NAME)
         signature_sub.setAlignment(Qt.AlignCenter)
         signature_sub.setStyleSheet("color:#777169; font-size:10px; letter-spacing:1px;")
         layout.addWidget(signature_sub)
@@ -3277,7 +3277,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setOrganizationName("Azra Gold")
+    app.setOrganizationName(APP_NAME)
     icon_path = theme_asset_path("app_icon")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
@@ -3285,7 +3285,7 @@ def main():
     font = QFont("Segoe UI", 10)
     app.setFont(font)
 
-    settings = QSettings("Azra Gold", "Azra Converter")
+    settings = QSettings(APP_NAME, APP_NAME)
     saved_theme = settings.value("active_theme", "")
     onboarding_complete = settings.value("theme_onboarding_complete", False, type=bool)
 

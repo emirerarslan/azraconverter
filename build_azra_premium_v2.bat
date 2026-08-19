@@ -4,7 +4,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 echo ============================================
-echo      AZRA CONVERTER - PREMIUM BUILD
+echo             CONVERTER BUILD
 echo ============================================
 echo.
 
@@ -25,8 +25,8 @@ if not exist "main.py" (
     exit /b 1
 )
 
-if not exist "converter.ico" (
-    echo HATA: converter.ico bulunamadi.
+if not exist "converter-new.ico" (
+    echo HATA: converter-new.ico bulunamadi.
     pause
     exit /b 1
 )
@@ -55,14 +55,14 @@ echo.
 echo Eski build temizleniyor...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
-if exist "AZRA CONVERTER.spec" del /q "AZRA CONVERTER.spec"
+if exist "ConverteR.spec" del /q "ConverteR.spec"
 
 echo.
 echo PREMIUM EXE klasoru olusturuluyor...
 %PYTHON_CMD% -m PyInstaller --noconfirm --clean --onedir --windowed ^
- --name "AZRA CONVERTER" ^
- --icon "converter.ico" ^
- --add-data "converter.ico;." ^
+ --name "ConverteR" ^
+ --icon "converter-new.ico" ^
+ --add-data "converter-new.ico;." ^
  --add-data "azra-logo.png;." ^
  --add-data "rafine-logo.jpg;." ^
  --add-data "emir-logo.jpg;." ^
@@ -82,8 +82,8 @@ if errorlevel 1 (
 echo.
 echo ============================================
 echo BASARILI!
-echo Program: dist\AZRA CONVERTER\AZRA CONVERTER.exe
-echo ICO:     dist\AZRA CONVERTER\converter.ico
+echo Program: dist\ConverteR\ConverteR.exe
+echo ICO:     dist\ConverteR\converter-new.ico
 echo ============================================
 echo.
 pause
