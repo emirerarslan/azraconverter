@@ -49,6 +49,12 @@ if not exist "bayrak.jpeg" (
     exit /b 1
 )
 
+if not exist "setup_flag.bmp" (
+    echo HATA: setup_flag.bmp bulunamadi.
+    pause
+    exit /b 1
+)
+
 if not exist "%TESS_DIR%\tesseract.exe" (
     echo HATA: Tesseract bulunamadi:
     echo %TESS_DIR%\tesseract.exe
@@ -70,6 +76,7 @@ echo PREMIUM EXE klasoru olusturuluyor...
  --add-data "converter-new.ico;." ^
  --add-data "azra-logo.png;." ^
  --add-data "bayrak.jpeg;." ^
+ --add-data "setup_flag.bmp;." ^
  --add-data "rafine-logo.jpg;." ^
  --add-data "emir-logo.jpg;." ^
  --add-data "emir-video.mp4;." ^

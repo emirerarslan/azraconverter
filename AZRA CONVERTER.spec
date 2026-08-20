@@ -8,6 +8,8 @@ a = Analysis(
     datas=[
         ('converter-new.ico', '.'),
         ('azra-logo.png', '.'),
+        ('bayrak.jpeg', '.'),
+        ('setup_flag.bmp', '.'),
         ('rafine-logo.jpg', '.'),
         ('emir-logo.jpg', '.'),
         ('emir-video.mp4', '.'),

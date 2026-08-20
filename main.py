@@ -45,7 +45,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.26"
+APP_VERSION = "1.1.27"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -177,14 +177,18 @@ def app_folder_path(name):
 
 def theme_asset_path(asset_key):
     """Bir tema varlığını dış uygulama klasöründe veya paket içinde bulur."""
+    return next(theme_asset_paths(asset_key), "")
+
+
+def theme_asset_paths(asset_key):
+    """Bir varlığın mevcut tüm adaylarını, dış dosyaya öncelik vererek döndürür."""
     for name in THEME_ASSET_CANDIDATES.get(asset_key, ()):
         external = app_folder_path(name)
         if external.exists():
-            return str(external)
+            yield str(external)
         bundled = Path(resource_path(name))
-        if bundled.exists():
-            return str(bundled)
-    return ""
+        if bundled.exists() and bundled != external:
+            yield str(bundled)
 
 
 def version_key(version):
@@ -1778,11 +1782,16 @@ class DropZone(QFrame):
         self.update()
 
     def _should_show_border(self):
-        return bool(
-            self.property("selected")
-            or self.property("dragging")
-            or self.underMouse()
-        )
+        # LED şeridi panel boşta olsa da daima görünür ve dönmeye devam eder.
+        return True
+
+    def _border_intensity(self):
+        """Hover/sürükleme sırasında sabit şeride ek parlaklık uygular."""
+        if self.underMouse() or self.property("dragging"):
+            return 1.0
+        if self.property("selected"):
+            return 0.82
+        return 0.58
 
     def set_glow_colors(self, glow, halo):
         self._glow_color = QColor(glow)
@@ -1800,8 +1809,14 @@ class DropZone(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         rect = self.rect().adjusted(3, 3, -3, -3)
+        intensity = self._border_intensity()
 
-        halo = QPen(self._halo_color, 5)
+        halo_color = QColor(self._halo_color)
+        halo_color.setAlpha(max(20, min(255, round(halo_color.alpha() * (1.25 + intensity * 2.0)))))
+        light_color = QColor(self._glow_color)
+        light_color.setAlpha(max(70, min(255, round(light_color.alpha() * intensity))))
+
+        halo = QPen(halo_color, 4.0 + intensity * 1.5)
         halo.setStyle(Qt.DashLine)
         halo.setDashPattern([1.2, 11.0])
         halo.setDashOffset(-self._glow_phase)
@@ -1809,7 +1824,7 @@ class DropZone(QFrame):
         painter.setPen(halo)
         painter.drawRoundedRect(rect, 14, 14)
 
-        lights = QPen(self._glow_color, 1.7)
+        lights = QPen(light_color, 1.35 + intensity * 0.55)
         lights.setStyle(Qt.DashLine)
         lights.setDashPattern([1.0, 12.5])
         lights.setDashOffset(-self._glow_phase)
@@ -3576,7 +3591,11 @@ class MainWindow(QMainWindow):
         flag = QLabel()
         flag.setAlignment(Qt.AlignCenter)
         flag.setFixedSize(260, 138)
-        self._set_scaled_pixmap(flag, theme_asset_path("turkish_flag"))
+        # Bazı paketlerde JPEG eklentisi açılamayabilir. İlk mevcut dosyada
+        # durmak yerine gerçekten yüklenebilen adaya (BMP dahil) geçilir.
+        for flag_path in theme_asset_paths("turkish_flag"):
+            if self._set_scaled_pixmap(flag, flag_path):
+                break
         layout.addWidget(flag, 0, Qt.AlignHCenter)
 
         photo = QLabel()

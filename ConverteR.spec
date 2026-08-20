@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('converter-new.ico', '.'), ('azra-logo.png', '.'), ('bayrak.jpeg', '.'), ('rafine-logo.jpg', '.'), ('emir-logo.jpg', '.'), ('emir-video.mp4', '.'), ('emir-yıldız.png', '.'), ('Gold-donusturucu.png', '.'), ('silver-gecmis.png', '.'), ('bronz-hakkinda.png', '.'), ('dolar-donusturucu.png', '.'), ('euro-gecmis.png', '.'), ('frang-hakkinda.png', '.'), ('update_config.json', '.'), ('C:/Program Files/Tesseract-OCR', 'tesseract')],
+    datas=[('converter-new.ico', '.'), ('azra-logo.png', '.'), ('bayrak.jpeg', '.'), ('setup_flag.bmp', '.'), ('rafine-logo.jpg', '.'), ('emir-logo.jpg', '.'), ('emir-video.mp4', '.'), ('emir-yıldız.png', '.'), ('Gold-donusturucu.png', '.'), ('silver-gecmis.png', '.'), ('bronz-hakkinda.png', '.'), ('dolar-donusturucu.png', '.'), ('euro-gecmis.png', '.'), ('frang-hakkinda.png', '.'), ('update_config.json', '.'), ('C:/Program Files/Tesseract-OCR', 'tesseract')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
