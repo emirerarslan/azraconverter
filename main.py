@@ -46,7 +46,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -3154,7 +3154,7 @@ class MainWindow(QMainWindow):
 
         self.emir_video_widget = QVideoWidget() if QT_MULTIMEDIA_AVAILABLE else QLabel()
         self.emir_video_widget.setObjectName("emirVideo")
-        self.emir_video_widget.setFixedSize(179, 82)
+        self.emir_video_widget.setFixedSize(179, 93)
         if QT_MULTIMEDIA_AVAILABLE:
             # Siyah şerit bırakmadan tüm alanı kapla.
             self.emir_video_widget.setAspectRatioMode(Qt.IgnoreAspectRatio)
@@ -3165,7 +3165,7 @@ class MainWindow(QMainWindow):
         self.emir_photo = QLabel()
         self.emir_photo.setObjectName("emirPhoto")
         self.emir_photo.setAlignment(Qt.AlignCenter)
-        self.emir_photo.setFixedSize(82, 112)
+        self.emir_photo.setFixedSize(100, 137)
         self.emir_photo.setStyleSheet("background: #0A090A; border: 1px solid #5D252E; border-radius: 8px;")
         self.emir_photo.hide()
         side.addWidget(self.emir_photo, 0, Qt.AlignHCenter)
@@ -3937,16 +3937,9 @@ class MainWindow(QMainWindow):
 
         photo = QLabel()
         photo.setAlignment(Qt.AlignCenter)
-        photo.setFixedSize(72, 96)
+        photo.setFixedSize(110, 147)
         self._set_scaled_pixmap(photo, theme_asset_path("emir_photo"))
         layout.addWidget(photo, 0, Qt.AlignHCenter)
-
-        brand = QLabel("CONVERTER")
-        brand.setAlignment(Qt.AlignCenter)
-        brand.setStyleSheet(
-            "color:#D6B16B; font-size:14px; font-weight:800; letter-spacing:2px;"
-        )
-        layout.addWidget(brand)
 
         title = QLabel(APP_NAME)
         title.setObjectName("dialogTitle")

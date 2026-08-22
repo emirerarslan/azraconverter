@@ -1,8 +1,8 @@
 {
-  "version": "1.2.1",
-  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.2.1/CONVERTER-SETUP-1.2.1.exe",
-  "sha256": "2a10a070b606a9c76b023af6f47b44d49139828346a04d0bde600eeb47119c6e",
+  "version": "1.2.2",
+  "download_url": "https://github.com/emirerarslan/ConverteR/releases/download/v1.2.2/CONVERTER-SETUP-1.2.2.exe",
+  "sha256": "646c8b19b8d7a0b925d4b501e7ae0368e40452c6306b213ac43a7a1ddacadd63",
   "package_url": "",
   "package_sha256": "",
-  "notes": "Güncelleme kurulumu düzeltildi; boşluk içeren kurulum yolları güvenli hale getirildi ve kurulan uygulama SHA-256 ile doğrulanıyor."
+  "notes": "Bayrak videosu siyah şeritsiz 1568x818 olarak yenilendi; yan panel ve Hakkında fotoğrafları büyütüldü, Hakkında başlığı sadeleştirildi."
 }
