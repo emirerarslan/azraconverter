@@ -31,6 +31,7 @@ def _install_pyside_stubs():
     core.QObject = _DummyWidget
     core.Signal = lambda *_args, **_kwargs: _DummySignal()
     core.QThread = core.QTimer = core.QSettings = core.QUrl = core.QSize = _DummyWidget
+    core.QRectF = core.QPointF = _DummyWidget
     core.QPropertyAnimation = core.QEasingCurve = _DummyWidget
     for name in ("QFont", "QIcon", "QPixmap", "QPainter", "QPainterPath", "QColor", "QPen"):
         setattr(gui, name, _DummyWidget)
@@ -184,8 +185,22 @@ class ConversionTests(unittest.TestCase):
         expected = {
             ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".txt",
             ".xls", ".xlsx", ".xlsm", ".xlsb", ".ods", ".csv", ".tsv",
+            ".mp4", ".avi", ".mov", ".mkv", ".webm", ".mpeg",
         }
         self.assertTrue(expected.issubset(main.SUPPORTED_EXTENSIONS))
+
+    def test_video_conversion_requires_ffmpeg(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(
+            main, "find_ffmpeg", return_value=None
+        ):
+            source = Path(folder) / "sample.mov"
+            source.write_bytes(b"not-a-real-video")
+            with self.assertRaisesRegex(RuntimeError, "FFmpeg bulunamadı"):
+                main.video_convert(source, "mp4", Progress())
+
+    def test_ffmpeg_progress_time_is_converted_to_seconds(self):
+        self.assertAlmostEqual(main._ffmpeg_time_seconds("01:02:03.500000"), 3723.5)
+        self.assertEqual(main._ffmpeg_time_seconds("geçersiz"), 0.0)
 
     def test_word_excel_and_excel_word_round_trip(self):
         from docx import Document

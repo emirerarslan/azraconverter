@@ -1,10 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+ffmpeg_binaries = [('ffmpeg.exe', '.')] if Path('ffmpeg.exe').is_file() else []
+
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=ffmpeg_binaries,
     datas=[
         ('converter-new.ico', '.'),
         ('azra-logo.png', '.'),

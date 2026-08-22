@@ -5,6 +5,7 @@ import os
 import json
 import hashlib
 import csv
+import math
 import re
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ OCR_AVAILABLE = None
 _PDF_FONTS = None
 
 from PySide6.QtCore import (
-    Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl, QSize,
+    Qt, QObject, Signal, QThread, QTimer, QSettings, QUrl, QSize, QRectF, QPointF,
     QPropertyAnimation, QEasingCurve,
 )
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPainterPath, QColor, QPen
@@ -45,7 +46,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.1.27"
+APP_VERSION = "1.2.0"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -63,7 +64,20 @@ SPREADSHEET_EXTENSIONS = {
     ".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm",
     ".ods", ".csv", ".tsv",
 }
-SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | WORD_EXTENSIONS | SPREADSHEET_EXTENSIONS
+VIDEO_EXTENSIONS = {
+    ".mp4", ".m4v", ".avi", ".mov", ".mkv", ".webm", ".mpeg", ".mpg",
+}
+VIDEO_TARGETS = {
+    "mp4": ("MP4 video (.mp4)", "H.264 görüntü ve AAC ses ile geniş uyumluluk."),
+    "avi": ("AVI video (.avi)", "MPEG-4 görüntü ve MP3 ses ile AVI oluşturur."),
+    "mov": ("MOV video (.mov)", "H.264 görüntü ve AAC ses ile MOV oluşturur."),
+    "mkv": ("MKV video (.mkv)", "H.264 görüntü ve AAC ses ile MKV oluşturur."),
+    "webm": ("WebM video (.webm)", "VP9 görüntü ve Opus ses ile web uyumlu video oluşturur."),
+    "mpeg": ("MPEG video (.mpeg)", "MPEG-2 görüntü ve MP2 ses ile klasik MPEG oluşturur."),
+}
+SUPPORTED_EXTENSIONS = (
+    PDF_EXTENSIONS | WORD_EXTENSIONS | SPREADSHEET_EXTENSIONS | VIDEO_EXTENSIONS
+)
 
 
 # Tema varlıkları tek noktada tanımlanır. İlk eşleşen dosya kullanıldığı için
@@ -113,7 +127,10 @@ THEME_STYLESHEETS = {
         QLabel#pageTitle { color: #F7EBD0; }
         QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #D7B56D; }
         QPushButton#nav:checked { background: #1D2118; color: #E0BF74; border-left-color: #D7B56D; }
-        QFrame#dropZone { background: #0D1612; border-color: #54472C; }
+        QFrame#dropZone { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #101B16,stop:0.55 #0B1511,stop:1 #17160F); border-color: #5F4C2B; }
+        QLabel#dropKicker, QLabel#dropBadge { color: #D7B56D; }
+        QLabel#dropAction { background: #D7B56D; color: #10110D; }
+        QLabel#formatChip { border-color: #504329; color: #CBB278; }
         QFrame#conversionPanel, QFrame#conversionCard { background: #101713; border-color: #3E382A; }
         QPushButton#selectButton, QPushButton#convertButton { background: #D7B56D; color: #10110D; }
         QPushButton#modeButton:checked { background: #D7B56D; color: #11120E; border-color: #E8CF96; }
@@ -127,7 +144,10 @@ THEME_STYLESHEETS = {
         QLabel#eyebrow, QLabel#panelEyebrow, QLabel#sourceType { color: #38C4B2; }
         QPushButton#nav:hover { background: #102526; border-color: #27625E; }
         QPushButton#nav:checked { background: #102827; color: #55D3C3; border-left-color: #38C4B2; }
-        QFrame#dropZone { background: #0C181A; border-color: #2E5E5B; }
+        QFrame#dropZone { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #0D2021,stop:0.55 #091719,stop:1 #102323); border-color: #286B64; }
+        QLabel#dropKicker, QLabel#dropBadge { color: #55D3C3; }
+        QLabel#dropAction { background: #38C4B2; color: #071311; }
+        QLabel#formatChip { border-color: #28635E; color: #77CFC4; }
         QFrame#conversionPanel, QFrame#conversionCard { background: #0E1A1C; border-color: #28504E; }
         QComboBox#targetFormat { border-color: #2E7D75; }
         QPushButton#selectButton, QPushButton#convertButton { background: #38C4B2; color: #071311; }
@@ -152,7 +172,10 @@ THEME_STYLESHEETS = {
         }
         QPushButton#nav:pressed { background: #4A1D27; border-color: #FFF0AF; }
         QPushButton#nav:checked { background: #171215; color: #FFF2EE; border: 1px solid #A77B2E; }
-        QFrame#dropZone { background: #151114; border-color: #67313A; }
+        QFrame#dropZone { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #211419,stop:0.55 #151013,stop:1 #26171B); border-color: #75333E; }
+        QLabel#dropKicker, QLabel#dropBadge { color: #F0C56D; }
+        QLabel#dropAction { background: #C92F40; color: #FFF8F4; }
+        QLabel#formatChip { border-color: #70313B; color: #E6A8AD; }
         QFrame#conversionPanel, QFrame#conversionCard { background: #171315; border-color: #4E2A31; }
         QComboBox#targetFormat { border-color: #7F3843; }
         QPushButton#selectButton, QPushButton#convertButton { background: #C92F40; color: #FFF8F4; }
@@ -386,6 +409,129 @@ def unique_output(path):
         if not candidate.exists():
             return candidate
         i += 1
+
+
+def find_ffmpeg():
+    """Uygulama yanındaki/paket içindeki veya PATH'teki FFmpeg'i bulur."""
+    candidates = [
+        app_folder_path("ffmpeg.exe"), Path(resource_path("ffmpeg.exe")),
+        app_folder_path("ffmpeg"), Path(resource_path("ffmpeg")),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, RuntimeError, OSError):
+        return None
+
+
+def _video_duration_seconds(ffmpeg, source, startupinfo=None):
+    """FFmpeg başlığından video süresini saniye olarak okur."""
+    probe = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(source)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", startupinfo=startupinfo,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        check=False,
+    )
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", probe.stderr)
+    if not match:
+        return 0.0
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _ffmpeg_time_seconds(value):
+    """FFmpeg'in HH:MM:SS.mikrosaniye değerini saniyeye çevirir."""
+    try:
+        hours, minutes, seconds = value.split(":", 2)
+        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def video_convert(src, target_format, progress, cancel_check=None):
+    """FFmpeg ile videoyu seçilen kapsayıcı ve uyumlu kodeklere dönüştürür."""
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError(
+            "Video dönüşümü için FFmpeg bulunamadı. ffmpeg.exe dosyasını "
+            "ConverteR uygulamasının yanına koyun veya FFmpeg'i sisteme kurun."
+        )
+    if target_format not in VIDEO_TARGETS:
+        raise ValueError("Desteklenmeyen video hedef biçimi.")
+
+    src = Path(src)
+    suffix = ".mpeg" if target_format == "mpeg" else f".{target_format}"
+    out = unique_output(src.with_name(f"{src.stem}_donusturulmus{suffix}"))
+    codecs = {
+        "mp4": ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"],
+        "mov": ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "192k"],
+        "mkv": ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "192k"],
+        "avi": ["-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-b:a", "192k"],
+        "webm": ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "6", "-crf", "32", "-b:v", "0", "-c:a", "libopus", "-b:a", "128k"],
+        "mpeg": ["-c:v", "mpeg2video", "-q:v", "5", "-c:a", "mp2", "-b:a", "192k"],
+    }
+    startupinfo = None
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+    duration = _video_duration_seconds(ffmpeg, src, startupinfo)
+    command = [
+        ffmpeg, "-hide_banner", "-y", "-i", str(src), *codecs[target_format],
+        "-progress", "pipe:1", "-nostats", str(out),
+    ]
+    error_log = tempfile.TemporaryFile(
+        mode="w+t", encoding="utf-8", errors="replace"
+    )
+    try:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=error_log,
+            text=True, encoding="utf-8", errors="replace", startupinfo=startupinfo,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        progress.emit(1)
+        while True:
+            if cancel_check:
+                try:
+                    cancel_check()
+                except ConversionCancelled:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    raise
+            line = process.stdout.readline() if process.stdout else ""
+            if not line and process.poll() is not None:
+                break
+            key, separator, value = line.strip().partition("=")
+            if separator and key == "out_time" and duration > 0:
+                elapsed = _ffmpeg_time_seconds(value)
+                progress.emit(min(99, max(1, int(elapsed / duration * 100))))
+        process.wait()
+        error_log.seek(0)
+        error_text = error_log.read().strip()
+        if process.returncode != 0:
+            detail = error_text.splitlines()[-1] if error_text else "FFmpeg işlemi tamamlayamadı."
+            raise RuntimeError(f"Video dönüştürülemedi: {detail}")
+        progress.emit(100)
+        return out
+    except Exception:
+        if out.exists():
+            try:
+                out.unlink()
+            except OSError:
+                pass
+        raise
+    finally:
+        error_log.close()
 
 
 def _ps_quote(value):
@@ -1723,6 +1869,11 @@ class ConverterWorker(QObject):
                 result = word_to_excel(self.source, progress)
             elif self.mode == "excel_word":
                 result = excel_to_word(self.source, progress)
+            elif self.mode.startswith("video_"):
+                result = video_convert(
+                    self.source, self.mode.removeprefix("video_"), progress,
+                    cancel_check=self.check_cancelled,
+                )
             else:
                 raise ValueError("Geçersiz dönüşüm seçildi.")
 
@@ -1736,6 +1887,120 @@ class ConverterWorker(QObject):
 
 
 
+class OrbitPlusBadge(QWidget):
+    """Üç tur dönen, ardından beş kez çakan dosya seçim rozeti."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._text = "+"
+        self._angle = 270.0
+        self._turn_progress = 0.0
+        self._completed_turns = 0
+        self._flash_steps = 0
+        self._flash_on = False
+        self._glow_color = QColor(235, 196, 111, 235)
+        self._halo_color = QColor(214, 177, 107, 60)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(132, 132)
+        self._timer = QTimer(self)
+        self._timer.setInterval(55)
+        self._timer.timeout.connect(self._advance_animation)
+        self._timer.start()
+
+    def setText(self, text):
+        self._text = str(text)
+        self.update()
+
+    def set_colors(self, glow, halo):
+        self._glow_color = QColor(glow)
+        self._halo_color = QColor(halo)
+        self.update()
+
+    def _advance_animation(self):
+        if self._flash_steps:
+            self._flash_on = not self._flash_on
+            self._flash_steps -= 1
+            if self._flash_steps == 0:
+                self._flash_on = False
+                self._completed_turns = 0
+                self._angle = 270.0
+                self._turn_progress = 0.0
+        else:
+            self._angle = (self._angle + 12.0) % 360.0
+            self._turn_progress += 12.0
+            if self._turn_progress >= 360.0:
+                self._turn_progress -= 360.0
+                self._completed_turns += 1
+                if self._completed_turns >= 3:
+                    # On açık/kapalı adımı tam beş flaş oluşturur.
+                    self._flash_steps = 10
+                    self._flash_on = True
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        center = QPointF(self.width() / 2, self.height() / 2)
+        outer = QRectF(11, 11, self.width() - 22, self.height() - 22)
+
+        glow = QColor(self._glow_color)
+        halo = QColor(self._halo_color)
+        if self._flash_steps and not self._flash_on:
+            glow.setAlpha(45)
+            halo.setAlpha(15)
+        elif self._flash_on:
+            glow.setAlpha(255)
+            halo.setAlpha(155)
+
+        if self._flash_on:
+            painter.setBrush(Qt.NoBrush)
+            for inset, alpha, width in ((2, 95, 8.0), (7, 145, 4.5)):
+                flash_halo = QColor(halo)
+                flash_halo.setAlpha(alpha)
+                painter.setPen(QPen(flash_halo, width))
+                painter.drawEllipse(outer.adjusted(-inset, -inset, inset, inset))
+
+        fill = QColor(glow)
+        fill.setAlpha(32 if not self._flash_on else 85)
+        painter.setBrush(fill)
+        painter.setPen(QPen(glow, 2.2 if not self._flash_on else 4.0))
+        painter.drawEllipse(outer)
+
+        orbit = outer.adjusted(20, 20, -20, -20)
+        orbit_pen = QColor(glow)
+        orbit_pen.setAlpha(95 if not self._flash_on else 230)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(orbit_pen, 1.8))
+        painter.drawEllipse(orbit)
+
+        if not self._flash_steps:
+            radians = math.radians(self._angle)
+            radius = orbit.width() / 2
+            satellite = QPointF(
+                center.x() + math.cos(radians) * radius,
+                center.y() + math.sin(radians) * radius,
+            )
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(glow)
+            point_halo = QColor(glow)
+            point_halo.setAlpha(65)
+            painter.setBrush(point_halo)
+            painter.drawEllipse(satellite, 10.5, 10.5)
+            painter.setBrush(glow)
+            painter.drawEllipse(satellite, 6.3, 6.3)
+
+        text_color = QColor(glow)
+        text_color.setAlpha(glow.alpha())
+        painter.setPen(text_color)
+        font = QFont("Segoe UI")
+        font.setBold(True)
+        font.setPixelSize(44 if self._text == "+" else 21)
+        painter.setFont(font)
+        text_rect = self.rect().adjusted(0, -6, 0, -6) if self._text == "+" else self.rect()
+        painter.drawText(text_rect, Qt.AlignCenter, self._text)
+        painter.end()
+
+
 class DropZone(QFrame):
     fileDropped = Signal(str)
     clicked = Signal()
@@ -1745,44 +2010,65 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("dropZone")
-        self._glow_phase = 0.0
         self._glow_color = QColor(235, 196, 111, 225)
         self._halo_color = QColor(214, 177, 107, 50)
-        self._border_timer = QTimer(self)
-        self._border_timer.timeout.connect(self._advance_border_glow)
-        self._border_timer.start(42)
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
-        layout.setSpacing(8)
+        layout.setContentsMargins(34, 30, 34, 32)
+        layout.setSpacing(13)
 
-        self.icon = QLabel("DOSYA")
-        self.icon.setAlignment(Qt.AlignCenter)
-        self.icon.setObjectName("dropIcon")
+        self.kicker = QLabel("PREMIUM CONVERSION SUITE")
+        self.kicker.setAlignment(Qt.AlignCenter)
+        self.kicker.setObjectName("dropKicker")
 
-        self.title = QLabel("DOSYAYI BURAYA BIRAK")
+        self.icon = OrbitPlusBadge(self)
+        self.icon.setObjectName("dropBadge")
+
+        self.title = QLabel("Video veya belgenizi buraya bırakın")
         self.title.setAlignment(Qt.AlignCenter)
         self.title.setObjectName("dropTitle")
         self.title.setWordWrap(True)
 
-        self.sub = QLabel("PDF | DOC/DOCX | XLS/XLSX | ODT/ODS | CSV/RTF")
+        self.sub = QLabel("Sürükleyip bırakın ya da bilgisayarınızdan güvenle seçin")
         self.sub.setAlignment(Qt.AlignCenter)
         self.sub.setObjectName("dropSub")
         self.sub.setWordWrap(True)
 
-        layout.addWidget(self.icon)
+        self.action = QLabel("DOSYA SEÇ")
+        self.action.setAlignment(Qt.AlignCenter)
+        self.action.setObjectName("dropAction")
+        self.action.setFixedSize(132, 34)
+
+        self.format_row = QWidget()
+        format_layout = QHBoxLayout(self.format_row)
+        format_layout.setContentsMargins(0, 8, 0, 0)
+        format_layout.setSpacing(10)
+        format_layout.setAlignment(Qt.AlignCenter)
+        for text in ("VIDEO", "PDF", "WORD", "EXCEL"):
+            chip = QLabel(text)
+            chip.setObjectName("formatChip")
+            chip.setAlignment(Qt.AlignCenter)
+            chip.setFixedSize(68, 25)
+            format_layout.addWidget(chip)
+
+        layout.addWidget(self.kicker)
         layout.addWidget(self.title)
         layout.addWidget(self.sub)
+        layout.addWidget(self.action, 0, Qt.AlignHCenter)
+        layout.addWidget(self.format_row)
 
-    def _advance_border_glow(self):
-        """Altın şerit ışığını çerçevenin etrafında kesintisiz ilerletir."""
-        if not self._should_show_border():
-            return
-        self._glow_phase = (self._glow_phase + 1.35) % 72
-        self.update()
+        self.icon.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Dosya rozeti içerik akışından bağımsız olarak sol dikey merkezde durur.
+        left_margin = max(34, min(72, self.width() // 14))
+        self.icon.move(left_margin, (self.height() - self.icon.height()) // 2)
+        self.icon.raise_()
 
     def _should_show_border(self):
-        # LED şeridi panel boşta olsa da daima görünür ve dönmeye devam eder.
+        # İnce vurgu panel boşta da görünür.
         return True
 
     def _border_intensity(self):
@@ -1796,6 +2082,7 @@ class DropZone(QFrame):
     def set_glow_colors(self, glow, halo):
         self._glow_color = QColor(glow)
         self._halo_color = QColor(halo)
+        self.icon.set_colors(glow, halo)
         self.update()
 
     def paintEvent(self, event):
@@ -1803,9 +2090,9 @@ class DropZone(QFrame):
         if not self._should_show_border():
             return
 
-        # Stil sayfasının ince çerçevesinin üzerine iki katmanlı, hareketli bir
-        # LED şeridi çizilir. Kesiklerin kayması, ışığın çerçeveyi dolaştığı
-        # izlenimini verir; parlak katman ise altın yıldız parıltısı oluşturur.
+        # Stil çerçevesinin üzerine sakin bir halo ve üst kenarda ince bir ışık
+        # vurgusu eklenir. Böylece panel canlı kalır ancak LED şeridi gibi yoğun
+        # görünmez.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         rect = self.rect().adjusted(3, 3, -3, -3)
@@ -1816,21 +2103,21 @@ class DropZone(QFrame):
         light_color = QColor(self._glow_color)
         light_color.setAlpha(max(70, min(255, round(light_color.alpha() * intensity))))
 
-        halo = QPen(halo_color, 4.0 + intensity * 1.5)
-        halo.setStyle(Qt.DashLine)
-        halo.setDashPattern([1.2, 11.0])
-        halo.setDashOffset(-self._glow_phase)
-        halo.setCapStyle(Qt.RoundCap)
+        halo = QPen(halo_color, 1.0 + intensity * 0.8)
+        halo.setStyle(Qt.SolidLine)
         painter.setPen(halo)
-        painter.drawRoundedRect(rect, 14, 14)
+        painter.drawRoundedRect(rect, 17, 17)
 
-        lights = QPen(light_color, 1.35 + intensity * 0.55)
-        lights.setStyle(Qt.DashLine)
-        lights.setDashPattern([1.0, 12.5])
-        lights.setDashOffset(-self._glow_phase)
+        light_color.setAlpha(max(40, round(light_color.alpha() * 0.72)))
+        lights = QPen(light_color, 1.4 + intensity * 0.65)
         lights.setCapStyle(Qt.RoundCap)
         painter.setPen(lights)
-        painter.drawRoundedRect(rect, 14, 14)
+        line_width = max(90, int(rect.width() * 0.22))
+        center_x = rect.center().x()
+        painter.drawLine(
+            center_x - line_width // 2, rect.top(),
+            center_x + line_width // 2, rect.top(),
+        )
         painter.end()
 
     def enterEvent(self, event):
@@ -1854,12 +2141,17 @@ class DropZone(QFrame):
         self.setProperty("selected", True)
         self.style().unpolish(self)
         self.style().polish(self)
-        self.icon.setText(path.suffix.lstrip(".").upper() or "DOSYA")
+        extension = path.suffix.lstrip(".").upper() or "DOSYA"
+        self.kicker.setText("DOSYA DÖNÜŞÜME HAZIR")
+        self.icon.setText(extension[:5])
         self.title.setText(path.name)
         self.sub.setText(
-            f"{size_text}  |  Değiştirmek için tıklayın veya yeni dosya bırakın"
-            if size_text else "Değiştirmek için tıklayın veya yeni dosya bırakın"
+            f"{size_text}  •  Yeni bir dosya bırakabilir veya seçiminizi değiştirebilirsiniz"
+            if size_text else "Yeni bir dosya bırakabilir veya seçiminizi değiştirebilirsiniz"
         )
+        self.action.setText("DOSYAYI DEĞİŞTİR")
+        self.action.setFixedWidth(168)
+        self.format_row.hide()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -2441,15 +2733,23 @@ class MainWindow(QMainWindow):
         self.active_theme = None
 
         self.setWindowTitle(APP_NAME)
-        # İçerik kaydırılabildiğinden pencere daha küçük boyutlarda da
-        # kullanılabilir. Son kullanılan boyut ve konum sonraki açılışta korunur.
-        self.setMinimumSize(640, 480)
+        # Ekrana göre dengeli bir başlangıç boyutu seçilir. Önceki oturumdan
+        # kalan aşırı küçük geometri, arayüzü sıkıştırmaması için yükseltilir.
+        self.setMinimumSize(900, 620)
         self._window_settings = QSettings(APP_NAME, APP_NAME)
         saved_geometry = self._window_settings.value("window_geometry")
+        screen = QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+        ideal_width = min(1240, int(available.width() * 0.82)) if available else 1200
+        ideal_height = min(820, int(available.height() * 0.82)) if available else 780
+        ideal_width = max(1000, ideal_width)
+        ideal_height = max(700, ideal_height)
         if saved_geometry:
             self.restoreGeometry(saved_geometry)
+            if self.width() < 1080 or self.height() < 700:
+                self.resize(ideal_width, ideal_height)
         else:
-            self.resize(1200, 780)
+            self.resize(ideal_width, ideal_height)
 
         icon_path = theme_asset_path("app_icon")
         if os.path.exists(icon_path):
@@ -2569,42 +2869,73 @@ class MainWindow(QMainWindow):
                 border-color: #6B5633;
             }
             QFrame#dropZone {
-                background: #111112;
-                border: none;
-                border-radius: 16px;
-                min-height: 210px;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                    stop:0 #181714, stop:0.5 #101011, stop:1 #17130D);
+                border: 1px solid #4B402A;
+                border-radius: 20px;
+                min-height: 340px;
             }
             QFrame#dropZone:hover,
             QFrame#dropZone[dragging="true"] {
-                background: #15130F;
-                border: 1px dashed #D6B16B;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                    stop:0 #211E17, stop:0.5 #15130F, stop:1 #231B0E);
+                border: 1px solid #D6B16B;
             }
             QFrame#dropZone[selected="true"] {
-                background: #17140F;
-                border: 2px solid #D6B16B;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                    stop:0 #201C14, stop:0.55 #141310, stop:1 #211A0D);
+                border: 1px solid #8A7040;
             }
-            QLabel#dropIcon {
+            QLabel#dropKicker {
                 color: #D6B16B;
-                font-size: 35px;
-                font-weight: 300;
-            }
-            QFrame#dropZone[selected="true"] QLabel#dropIcon {
-                font-size: 40px;
+                font-size: 10px;
                 font-weight: 800;
+                letter-spacing: 2px;
             }
-            QLabel#dropTitle {
-                color: #EDE9E1;
-                font-size: 18px;
-                font-weight: 700;
-            }
-            QFrame#dropZone[selected="true"] QLabel#dropTitle {
-                color: #F4E4BF;
+            QLabel#dropBadge {
+                background: rgba(214, 177, 107, 24);
+                color: #E3C57E;
+                border: 1px solid #826C3F;
+                border-radius: 36px;
                 font-size: 27px;
                 font-weight: 800;
             }
+            QFrame#dropZone[selected="true"] QLabel#dropBadge {
+                background: rgba(214, 177, 107, 35);
+                color: #F2D38C;
+                border-color: #C7A85F;
+                font-size: 16px;
+            }
+            QLabel#dropTitle {
+                color: #EDE9E1;
+                font-size: 20px;
+                font-weight: 750;
+            }
+            QFrame#dropZone[selected="true"] QLabel#dropTitle {
+                color: #F4E4BF;
+                font-size: 22px;
+                font-weight: 800;
+            }
             QLabel#dropSub {
-                color: #68645D;
+                color: #8D887F;
                 font-size: 12px;
+            }
+            QLabel#dropAction {
+                background: #D6B16B;
+                color: #11100E;
+                border-radius: 17px;
+                font-size: 11px;
+                font-weight: 900;
+                letter-spacing: 1px;
+            }
+            QLabel#formatChip {
+                background: rgba(255, 255, 255, 5);
+                color: #AFA07F;
+                border: 1px solid #403927;
+                border-radius: 12px;
+                font-size: 9px;
+                font-weight: 800;
+                letter-spacing: 1px;
             }
             QFrame#fileBar {
                 background: #121213;
@@ -2930,7 +3261,7 @@ class MainWindow(QMainWindow):
         heading = QVBoxLayout()
         heading.setSpacing(4)
 
-        eyebrow = QLabel("DOCUMENT TOOLS")
+        eyebrow = QLabel("DOCUMENT & VIDEO TOOLS")
         eyebrow.setObjectName("eyebrow")
         heading.addWidget(eyebrow)
 
@@ -2938,7 +3269,7 @@ class MainWindow(QMainWindow):
         title.setObjectName("pageTitle")
         heading.addWidget(title)
 
-        subtitle = QLabel("PDF, Word ve Excel arasında altı yönlü, yüksek kaliteli dönüşüm.")
+        subtitle = QLabel("PDF, Word, Excel ve videolar için yüksek kaliteli dönüşüm.")
         subtitle.setObjectName("pageSubtitle")
         heading.addWidget(subtitle)
 
@@ -3692,7 +4023,7 @@ class MainWindow(QMainWindow):
             self,
             "Dosya Seç",
             "",
-            "Desteklenen Dosyalar (*.pdf *.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt *.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv);;PDF (*.pdf);;Word (*.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt);;Excel (*.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv)"
+            "Desteklenen Dosyalar (*.pdf *.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt *.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv *.mp4 *.m4v *.avi *.mov *.mkv *.webm *.mpeg *.mpg);;Video (*.mp4 *.m4v *.avi *.mov *.mkv *.webm *.mpeg *.mpg);;PDF (*.pdf);;Word (*.doc *.docx *.docm *.dot *.dotx *.dotm *.odt *.rtf *.txt);;Excel (*.xls *.xlsx *.xlsm *.xlsb *.xlt *.xltx *.xltm *.ods *.csv *.tsv)"
         )
         if path:
             self.set_file(path)
@@ -3701,7 +4032,7 @@ class MainWindow(QMainWindow):
         path = Path(path)
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             QMessageBox.warning(self, "Desteklenmeyen dosya",
-                                "Bu dosya türü desteklenmiyor.\n\nPDF veya yaygın bir Word/Excel dosyası seçin.")
+                                "Bu dosya türü desteklenmiyor.\n\nPDF, Word, Excel veya desteklenen bir video seçin.")
             return
 
         self.source_file = str(path)
@@ -3727,6 +4058,13 @@ class MainWindow(QMainWindow):
             return [
                 ("word_pdf", "PDF belgesi (.pdf)", "Belge düzenini koruyarak PDF oluşturur."),
                 ("word_excel", "Excel belgesi (.xlsx)", "Metin ve tabloları çalışma sayfalarına aktarır."),
+            ]
+        if ext in VIDEO_EXTENSIONS:
+            source_target = "mpeg" if ext in {".mpeg", ".mpg"} else ext.lstrip(".")
+            return [
+                (f"video_{target}", label, hint)
+                for target, (label, hint) in VIDEO_TARGETS.items()
+                if target != source_target
             ]
         return []
 

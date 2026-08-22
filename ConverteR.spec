@@ -1,10 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+ffmpeg_binaries = [('ffmpeg.exe', '.')] if Path('ffmpeg.exe').is_file() else []
+
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=ffmpeg_binaries,
     datas=[('converter-new.ico', '.'), ('azra-logo.png', '.'), ('bayrak.jpeg', '.'), ('setup_flag.bmp', '.'), ('rafine-logo.jpg', '.'), ('emir-logo.jpg', '.'), ('emir-video.mp4', '.'), ('emir-yıldız.png', '.'), ('Gold-donusturucu.png', '.'), ('silver-gecmis.png', '.'), ('bronz-hakkinda.png', '.'), ('dolar-donusturucu.png', '.'), ('euro-gecmis.png', '.'), ('frang-hakkinda.png', '.'), ('update_config.json', '.'), ('C:/Program Files/Tesseract-OCR', 'tesseract')],
     hiddenimports=[],
     hookspath=[],
