@@ -46,7 +46,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 APP_NAME = "ConverteR"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_ICON_FILE = "converter-new.ico"
 UPDATE_CONFIG_FILE = "update_config.json"
 DEFAULT_MANIFEST_URLS = [
@@ -3877,9 +3877,15 @@ class MainWindow(QMainWindow):
             f"  $source = '{_ps_quote(staged_app)}'\r\n"
             f"  $target = '{_ps_quote(install_dir)}'\r\n"
             f"  $exe = '{_ps_quote(current_executable)}'\r\n"
-            "  $arguments = @($source, $target, '/E', '/COPY:DAT', '/R:5', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')\r\n"
-            "  $copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden\r\n"
-            "  if ($copy.ExitCode -gt 7) { throw \"Dosyalar kopyalanamadı (robocopy: $($copy.ExitCode)).\" }\r\n"
+            "  & robocopy.exe $source $target /E /COPY:DAT /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null\r\n"
+            "  $copyExitCode = $LASTEXITCODE\r\n"
+            "  if ($copyExitCode -gt 7) { throw \"Dosyalar kopyalanamadı (robocopy: $copyExitCode).\" }\r\n"
+            "  $sourceExe = Join-Path $source 'ConverteR.exe'\r\n"
+            "  $targetExe = Join-Path $target 'ConverteR.exe'\r\n"
+            "  if (-not (Test-Path -LiteralPath $sourceExe) -or -not (Test-Path -LiteralPath $targetExe)) { throw 'Güncel uygulama dosyası bulunamadı.' }\r\n"
+            "  $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $sourceExe).Hash\r\n"
+            "  $targetHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $targetExe).Hash\r\n"
+            "  if ($sourceHash -ne $targetHash) { throw 'Güncellenen uygulama dosyası doğrulanamadı.' }\r\n"
             "  @{status='success'; version=$version; message=''} | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8\r\n"
             "  $status.Text = 'Tamamlandı. Program açılıyor...'\r\n"
             "  [System.Windows.Forms.Application]::DoEvents()\r\n"
